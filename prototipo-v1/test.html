@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>test</title></head>
+<body>
+<div id="stage">
+  <canvas id="game" width="890" height="545"></canvas>
+  <div id="intro" style="display:none"><button id="startBtn"></button></div>
+  <div id="endScreen" style="display:none"><h2 id="endTitle"></h2><p id="endText"></p><button id="restartBtn"></button></div>
+</div>
+<div id="turnLabel"></div><span id="dealersLeft"></span>
+<div id="unitInfo"></div><div id="forecastBox"><div id="forecast"></div></div>
+<button id="waitBtn"></button><button id="endTurnBtn"></button><div id="log"></div>
+<script>
+  // en headless dump-dom no hay frames de compositor: emular rAF con timers
+  window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+</script>
+<script src="game.js"></script>
+<script>
+(async () => {
+  const out = [];
+  const t = (name, cond) => out.push((cond ? 'PASS' : 'FAIL') + ' ' + name);
+  try {
+    const cap = units.find(u => u.type === 'capitan');
+    const reach = bfsReach(cap);
+    t('reach-size', reach.size > 10);
+    select(cap);
+    t('state-selected', game.state === 'selected');
+    await playerMoveTo(cap, k(4, 4));
+    t('moved-4-4', cap.x === 4 && cap.y === 4);
+    t('cap-done', cap.acted || game.state === 'target');
+    if (game.state === 'target') await finishAction(game.selected);
+
+    const sic = units.find(u => u.type === 'sicario');
+    const sold = units.find(u => u.type === 'soldado');
+    sic.x = sold.x + 1; sic.y = sold.y; sic.gx = sic.x; sic.gy = sic.y;
+    select(sold);
+    t('target-found', game.targets.has(sic));
+    const hp0 = sic.hp;
+    await playerEngage(sold, sic);
+    t('damage-dealt', sic.hp < hp0);
+    t('sold-acted', sold.acted);
+
+    game.busy = false; game.state = 'idle'; game.selected = null;
+    await enemyTurn();
+    t('back-to-player', game.phase === 'player');
+    t('round-2', game.round === 2);
+    t('players-reset', alive('player').every(p => !p.acted));
+
+    // victoria: eliminar a los vendedores
+    for (const d of units.filter(u => u.boss)) { d.hp = 0; }
+    checkEnd();
+    t('victory', game.over === true);
+  } catch (e) {
+    out.push('ERROR ' + e.message + ' @ ' + (e.stack || '').split('\n')[1]);
+  }
+  const d = document.createElement('div');
+  d.id = 'testout';
+  d.textContent = out.join(' | ');
+  document.body.appendChild(d);
+})();
+</script>
+</body>
+</html>

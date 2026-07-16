@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patrulla Mercenaria — Operación Barrio Limpio</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1d2026; --panel2:#262a32; --line:#343a45;
+    --txt:#d6dae2; --dim:#8a91a0; --cyan:#39c5e0; --red:#e05555; --gold:#e0b23c; --green:#5fbf60;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(ellipse at 50% 0%, #1b1e25 0%, var(--bg) 70%);
+    color:var(--txt);
+    font-family:"Segoe UI", system-ui, sans-serif;
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+    padding:14px;
+  }
+  header{margin-bottom:10px; text-align:center;}
+  header h1{
+    font-size:22px; letter-spacing:3px; text-transform:uppercase;
+    color:var(--cyan); text-shadow:0 0 12px rgba(57,197,224,.4);
+  }
+  header p{color:var(--dim); font-size:12px; letter-spacing:1px;}
+  #layout{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; justify-content:center;}
+  #stage{position:relative;}
+  canvas{
+    display:block; border:1px solid var(--line); border-radius:8px;
+    background:#101216; max-width:100%; height:auto;
+    box-shadow:0 10px 40px rgba(0,0,0,.5);
+    cursor:pointer;
+  }
+  #panel{
+    width:290px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:14px; display:flex; flex-direction:column; gap:12px;
+    font-size:13px;
+  }
+  .box{background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:10px;}
+  .boxtitle{font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-bottom:6px;}
+  #turnLabel{font-size:16px; font-weight:700; letter-spacing:1px;}
+  #turnLabel.player{color:var(--cyan);}
+  #turnLabel.enemy{color:var(--red);}
+  #objective b{color:var(--gold);}
+  #unitCard .uname{font-weight:700; font-size:14px; margin-bottom:4px;}
+  #unitCard .uname.enemy{color:var(--red);}
+  #unitCard .uname.player{color:var(--cyan);}
+  .hpbar{height:8px; background:#3a2020; border-radius:4px; overflow:hidden; margin:4px 0 8px;}
+  .hpbar div{height:100%; background:linear-gradient(90deg,#4fae50,#7bd07c); transition:width .25s;}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:3px 10px; color:var(--dim);}
+  .stats b{color:var(--txt); float:right;}
+  #forecast{color:var(--gold);}
+  #forecast .frow{display:flex; justify-content:space-between; margin-top:3px;}
+  button{
+    background:linear-gradient(180deg,#2b6f82,#1e4d5c); color:#e8f7fb;
+    border:1px solid #3a8ba1; border-radius:6px; padding:10px;
+    font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    cursor:pointer; width:100%;
+  }
+  button:hover:not(:disabled){filter:brightness(1.2);}
+  button:disabled{opacity:.4; cursor:default;}
+  button.warn{background:linear-gradient(180deg,#7d3b3b,#572929); border-color:#a15050;}
+  #waitBtn{display:none;}
+  #log{max-height:150px; overflow-y:auto; font-size:12px; line-height:1.5; color:var(--dim);}
+  #log .imp{color:var(--gold);}
+  #log .bad{color:var(--red);}
+  #log .good{color:var(--green);}
+  #help{font-size:11px; color:var(--dim); line-height:1.6;}
+  #help kbd{background:#333945; border-radius:3px; padding:0 5px; color:var(--txt); font-family:monospace;}
+  .overlay{
+    position:absolute; inset:0; border-radius:8px;
+    background:rgba(10,12,16,.88); backdrop-filter:blur(3px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:30px; gap:16px; z-index:5;
+  }
+  .overlay h2{font-size:30px; letter-spacing:4px; text-transform:uppercase;}
+  .overlay p{max-width:520px; line-height:1.7; color:var(--txt); font-size:14px;}
+  .overlay .sub{color:var(--dim); font-size:12px;}
+  .overlay button{width:auto; padding:12px 34px; font-size:15px;}
+  #intro h2{color:var(--cyan); text-shadow:0 0 16px rgba(57,197,224,.5);}
+  #endScreen{display:none;}
+  #endScreen h2.win{color:var(--gold); text-shadow:0 0 16px rgba(224,178,60,.5);}
+  #endScreen h2.lose{color:var(--red); text-shadow:0 0 16px rgba(224,85,85,.5);}
+</style>
+</head>
+<body>
+<header>
+  <h1>⬢ Patrulla Mercenaria</h1>
+  <p>OPERACIÓN BARRIO LIMPIO — táctica urbana por turnos</p>
+</header>
+
+<div id="layout">
+  <div id="stage">
+    <canvas id="game" width="890" height="545"></canvas>
+
+    <div class="overlay" id="intro">
+      <h2>Briefing</h2>
+      <p>
+        Tres <b style="color:var(--gold)">vendedores</b> controlan el tráfico del barrio,
+        protegidos por sicarios y pistoleros. El municipio nos paga por limpiar la zona.
+      </p>
+      <p>
+        Tu escuadrón: <b style="color:var(--cyan)">3 mercenarios</b> y
+        <b style="color:var(--cyan)">2 drones K9</b> (perros robot, rápidos y blindados).
+        Elimina a los tres vendedores marcados con <b style="color:var(--gold)">$</b>.
+      </p>
+      <p class="sub">
+        Clic en una unidad → se muestra su alcance · clic en casilla azul para mover ·
+        clic en enemigo marcado en rojo para atacar · las coberturas y el parque reducen el daño recibido
+      </p>
+      <button id="startBtn">Iniciar misión</button>
+    </div>
+
+    <div class="overlay" id="endScreen">
+      <h2 id="endTitle"></h2>
+      <p id="endText"></p>
+      <button id="restartBtn">Reiniciar misión</button>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="box">
+      <div class="boxtitle">Turno</div>
+      <div id="turnLabel" class="player">—</div>
+    </div>
+    <div class="box" id="objective">
+      <div class="boxtitle">Objetivo</div>
+      <div>Eliminar a los <b id="dealersLeft">3</b> vendedores <b>$</b></div>
+    </div>
+    <div class="box" id="unitCard">
+      <div class="boxtitle">Unidad</div>
+      <div id="unitInfo"><span style="color:var(--dim)">Pasa el cursor o selecciona una unidad</span></div>
+    </div>
+    <div class="box" id="forecastBox" style="display:none">
+      <div class="boxtitle">Pronóstico de combate</div>
+      <div id="forecast"></div>
+    </div>
+    <button id="waitBtn" class="warn">Esperar (no atacar)</button>
+    <button id="endTurnBtn">Terminar turno <span style="opacity:.6">[E]</span></button>
+    <div class="box">
+      <div class="boxtitle">Registro</div>
+      <div id="log"></div>
+    </div>
+    <div class="box" id="help">
+      <div class="boxtitle">Controles</div>
+      <kbd>Clic</kbd> seleccionar / mover / atacar<br>
+      <kbd>Clic der.</kbd> o <kbd>Esc</kbd> cancelar selección<br>
+      <kbd>E</kbd> terminar turno
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

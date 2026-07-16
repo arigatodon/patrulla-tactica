@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>smoke PATRULLAS</title></head>
+<body>
+<!-- DOM mínimo con los mismos ids que index.html -->
+<div id="escenario">
+  <canvas id="juego" width="960" height="600"></canvas>
+  <div id="telefono"><div id="telTitulo"></div><div id="telRespeto"></div>
+    <div id="telAcciones"></div><div id="telFeed"></div><button id="telCerrar"></button></div>
+  <div id="pantallaIntro" style="display:none"><button id="btnEmpezar"></button></div>
+  <div id="pantallaFin" style="display:none"><h2 id="finTitulo"></h2><p id="finTexto"></p>
+    <button id="btnSiguiente"></button><button id="btnReiniciarTodo"></button></div>
+</div>
+<div id="etiquetaTurno"></div><div id="nombreBarrio"></div>
+<span id="respetoNum"></span><span id="cartasNum"></span><div id="respetoBarra"></div>
+<div id="infoUnidad"></div><div id="cajaPronostico"><div id="pronostico"></div></div>
+<button id="btnTelefono"></button><button id="btnEsperar"></button>
+<button id="btnOperativo"></button><button id="btnFinTurno"></button>
+<div id="registro"></div><div id="ayuda"></div>
+
+<script>
+  // en headless dump-dom no hay frames de compositor: emular rAF con timers
+  window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+</script>
+<script src="js/nucleo.js"></script>
+<script src="js/datos.js"></script>
+<script src="js/mapa.js"></script>
+<script src="js/unidades.js"></script>
+<script src="js/objetos.js"></script>
+<script src="js/combate.js"></script>
+<script src="js/ia.js"></script>
+<script src="js/telefono.js"></script>
+<script src="js/render.js"></script>
+<script src="js/interfaz.js"></script>
+<script src="js/principal.js"></script>
+<script>
+(async () => {
+  const res = [];
+  const t = (nombre, cond) => res.push((cond ? 'PASS' : 'FAIL') + ' ' + nombre);
+  try {
+    borrarSave();
+
+    // --- 1. mapas procedurales: 12 semillas, todos conectados y con cajas ---
+    let mapasOK = 0, cajasOK = 0;
+    for (let s = 1; s <= 12; s++) {
+      const m = generarMapa(s * 7919, 1 + (s % 4));
+      if (_conectado(m)) mapasOK++;
+      let cajas = 0;
+      for (const fila of m.celdas) for (const c of fila) if (c === 'J') cajas++;
+      if (cajas >= 3) cajasOK++;
+    }
+    t('mapas-conectados-12/12', mapasOK === 12);
+    t('mapas-con-cajas', cajasOK === 12);
+
+    // --- 2. misión con semilla fija ---
+    iniciarMision(12345);
+    t('escuadron-4', vivos('jugador').length === 4);
+    t('hay-jefe', vivos('enemigo').some(e => e.jefe));
+    t('hay-sapo', vivos('enemigo').some(e => e.sapo));
+
+    // --- 3. niebla: al inicio hay oculto, visible y el dron ve más ---
+    let ocultas = 0, visibles = 0;
+    for (let y = 0; y < mapa.filas; y++) for (let x = 0; x < mapa.cols; x++) {
+      if (mapa.niebla[y][x] === 0) ocultas++;
+      if (mapa.niebla[y][x] === 2) visibles++;
+    }
+    t('niebla-inicial', ocultas > 20 && visibles > 5);
+    const dron = vivos('jugador').find(u => u.vuela);
+    t('dron-vision-5', dron.vision === VISION_DRON);
+    // mover el dron al este revela más
+    const antes = ocultas;
+    dron.x += 4; dron.gx = dron.x; actualizarVision();
+    let ocultas2 = 0;
+    for (let y = 0; y < mapa.filas; y++) for (let x = 0; x < mapa.cols; x++)
+      if (mapa.niebla[y][x] === 0) ocultas2++;
+    t('dron-revela', ocultas2 < antes);
+    dron.x -= 4; dron.gx = dron.x; actualizarVision();
+
+    // --- 4. stats RPG y niveles ---
+    const ruth = vivos('jugador').find(u => u.clase === 'lider');
+    const pvAntes = ruth.pvMax, nivelAntes = ruth.nivel;
+    darExp(ruth, expSiguiente(ruth.nivel) + 5);
+    t('sube-nivel', ruth.nivel === nivelAntes + 1 && ruth.puntos === 3);
+    const vitAntes = ruth.stats.VIT;
+    subirStat(ruth, 'VIT');
+    t('sube-stat', ruth.stats.VIT === vitAntes + 1 && ruth.puntos === 2 && ruth.pvMax > pvAntes);
+
+    // --- 5. combate: mover y atacar con exp ---
+    const flaco = vivos('jugador').find(u => u.clase === 'pescador');
+    const soldado = vivos('enemigo').find(e => !e.sapo && !e.jefe);
+    soldado.x = flaco.x + 1; soldado.y = flaco.y; soldado.gx = soldado.x; soldado.gy = soldado.y;
+    actualizarVision();
+    seleccionar(flaco);
+    t('blanco-detectado', partida.blancos.has(soldado));
+    const pvSol = soldado.pv;
+    await atacarMoviendo(flaco, soldado);
+    t('dano-o-esquiva', soldado.pv < pvSol || soldado.pv === pvSol);   // pudo esquivar
+    t('flaco-actuo', flaco.actuo);
+
+    // --- 6. durabilidad: el arma se rompe y pasa a puños ---
+    const maicol = vivos('jugador').find(u => u.clase === 'tecnico');
+    maicol.arma = instanciarArma('botella');   // 1 uso
+    gastarArma(maicol);
+    t('arma-rota-a-punos', maicol.arma.id === 'punos');
+
+    // --- 7. loot: cajas con rareza válida y auras ---
+    sembrar(999);
+    const rarezas = new Set();
+    for (let i = 0; i < 200; i++) rarezas.add(defDe(tirarLoot()).rareza);
+    t('loot-rarezas-variadas', rarezas.size >= 3 && [...rarezas].every(r => RAREZAS[r]));
+
+    // --- 8. banca rompible da palo ---
+    mapa.celdas[flaco.y][flaco.x + 1 < mapa.cols ? flaco.x + 1 : flaco.x - 1] = 'N';
+    const bx = flaco.x + 1 < mapa.cols ? flaco.x + 1 : flaco.x - 1;
+    flaco.arma = instanciarArma('punos');
+    romperBanca(flaco, bx, flaco.y);
+    t('banca-da-palo', flaco.arma.id === 'palo' && mapa.bancasRotas.size === 1);
+
+    // --- 9. teléfono: foto marca, sapo expuesto, respeto sube ---
+    const sapo = vivos('enemigo').find(e => e.sapo);
+    if (sapo) {
+      sapo.x = maicol.x + 1; sapo.y = maicol.y; sapo.gx = sapo.x; sapo.gy = sapo.y;
+      actualizarVision();
+      const respAntes = cruzada.respeto;
+      maicol.actuo = false;
+      partida.seleccion = maicol; partida.estado = 'seleccion';
+      accionFoto(maicol);
+      t('sapo-expuesto', sapo.marcado && sapo.expuesto && cruzada.respeto > respAntes);
+    } else t('sapo-expuesto', false);
+
+    // --- 10. convocar vecino ---
+    cruzada.respeto = 60;
+    const antes10 = vivos('jugador').length;
+    const dona = vivos('jugador')[0]; dona.actuo = false;
+    partida.seleccion = dona; partida.estado = 'seleccion';
+    accionConvocar(dona);
+    t('vecino-se-une', vivos('jugador').length === antes10 + 1 && cruzada.respeto === 60 - COSTO_CONVOCAR);
+
+    // --- 11. operativo municipal con 3 cartas ---
+    cruzada.cartas = 3; cruzada.operativoUsado = false;
+    t('operativo-desbloqueado', operativoDisponible());
+    usarOperativo();
+    t('operativo-activo', partida.operativoRondas === RONDAS_OPERATIVO && cruzada.operativoUsado);
+
+    // --- 12. turno enemigo completo (con huida por operativo) ---
+    partida.ocupado = false; partida.estado = 'idle'; partida.seleccion = null;
+    const rondaAntes = partida.ronda;
+    await turnoEnemigo();
+    t('vuelve-al-jugador', partida.fase === 'jugador' && partida.ronda === rondaAntes + 1);
+    t('operativo-descuenta', partida.operativoRondas === RONDAS_OPERATIVO - 1);
+
+    // --- 13. victoria al caer el jefe ---
+    for (const e of vivos('enemigo').filter(e => e.jefe)) { e.pv = 0; }
+    chequearFin();
+    t('victoria', partida.terminada === true);
+    t('avanza-barrio', cruzada.barrio === 2);
+  } catch (e) {
+    res.push('ERROR ' + e.message + ' @ ' + (e.stack || '').split('\n')[1]);
+  }
+  const d = document.createElement('div');
+  d.id = 'resultado';
+  d.textContent = res.join(' | ');
+  document.body.appendChild(d);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PATRULLAS — Cartagena se levanta</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1d2026; --panel2:#262a32; --line:#343a45;
+    --txt:#d6dae2; --dim:#8a91a0; --cyan:#39c5e0; --red:#e05555; --gold:#f0c040; --green:#5fbf60;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:radial-gradient(ellipse at 50% 0%, #1b1e25 0%, var(--bg) 70%);
+    color:var(--txt); font-family:"Segoe UI", system-ui, sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:12px;
+  }
+  header{margin-bottom:8px; text-align:center;}
+  header h1{font-size:21px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan); text-shadow:0 0 12px rgba(57,197,224,.4);}
+  header p{color:var(--dim); font-size:12px; letter-spacing:1px;}
+  #contenedor{display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; justify-content:center;}
+  #escenario{position:relative; overflow:hidden; border-radius:8px;}
+  canvas{
+    display:block; border:1px solid var(--line); border-radius:8px; background:#101216;
+    max-width:100%; height:auto; box-shadow:0 10px 40px rgba(0,0,0,.5); cursor:pointer;
+  }
+  #panel{
+    width:300px; background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:12px; display:flex; flex-direction:column; gap:10px; font-size:13px;
+  }
+  .caja{background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:9px;}
+  .cajatitulo{font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); margin-bottom:5px;}
+  #etiquetaTurno{font-size:15px; font-weight:700; letter-spacing:1px;}
+  #etiquetaTurno.jugador{color:var(--cyan);}
+  #etiquetaTurno.enemigo{color:var(--red);}
+  #nombreBarrio{color:var(--gold); font-size:12px;}
+  .respetoWrap{height:9px; background:#2a2333; border-radius:5px; overflow:hidden; margin-top:4px;}
+  .respetoWrap div{height:100%; background:linear-gradient(90deg,#7a4ae0,#39c5e0); transition:width .3s;}
+  .uname{font-weight:700; font-size:14px; margin-bottom:3px;}
+  .uname.enemigo{color:var(--red);}
+  .uname.jugador{color:var(--cyan);}
+  .hpbar{height:8px; background:#3a2020; border-radius:4px; overflow:hidden; margin:4px 0 7px;}
+  .hpbar div{height:100%; background:linear-gradient(90deg,#4fae50,#7bd07c); transition:width .25s;}
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:2px 10px; color:var(--dim); margin-bottom:6px;}
+  .stats b{color:var(--txt); float:right;}
+  .statsRPG{display:flex; gap:7px; flex-wrap:wrap; margin:4px 0 6px; color:var(--dim); font-size:12px;}
+  .statsRPG b{color:var(--txt);}
+  .statsRPG .mas{
+    display:inline-block; width:15px; text-align:center; margin-left:2px; cursor:pointer;
+    background:var(--gold); color:#1a1a1a; border-radius:3px; font-weight:700;
+  }
+  .mochila{margin-top:5px; font-size:15px;}
+  .itemMochila{cursor:pointer; margin-right:4px; text-decoration:none;}
+  #pronostico{color:var(--gold);}
+  #pronostico .frow{display:flex; justify-content:space-between; margin-top:2px;}
+  button{
+    background:linear-gradient(180deg,#2b6f82,#1e4d5c); color:#e8f7fb;
+    border:1px solid #3a8ba1; border-radius:6px; padding:9px;
+    font-size:13px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+    cursor:pointer; width:100%;
+  }
+  button:hover:not(:disabled){filter:brightness(1.2);}
+  button:disabled{opacity:.4; cursor:default;}
+  button.alerta{background:linear-gradient(180deg,#7d3b3b,#572929); border-color:#a15050;}
+  button.dorado{background:linear-gradient(180deg,#8a6a20,#5c4715); border-color:#c8a040;}
+  #btnEsperar,#btnTelefono,#btnOperativo{display:none;}
+  #registro{max-height:130px; overflow-y:auto; font-size:12px; line-height:1.45; color:var(--dim);}
+  #registro .imp{color:var(--gold);}
+  #registro .mal{color:var(--red);}
+  #registro .bien{color:var(--green);}
+  #ayuda{font-size:11px; color:var(--dim); line-height:1.55;}
+  #ayuda kbd{background:#333945; border-radius:3px; padding:0 5px; color:var(--txt); font-family:monospace;}
+  .pantalla{
+    position:absolute; inset:0; border-radius:8px;
+    background:rgba(10,12,16,.9); backdrop-filter:blur(3px);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:26px; gap:14px; z-index:6;
+  }
+  .pantalla h2{font-size:28px; letter-spacing:4px; text-transform:uppercase;}
+  .pantalla p{max-width:560px; line-height:1.65; font-size:14px;}
+  .pantalla .sub{color:var(--dim); font-size:12px;}
+  .pantalla button{width:auto; padding:11px 30px; font-size:14px;}
+  #pantallaIntro h2{color:var(--cyan); text-shadow:0 0 16px rgba(57,197,224,.5);}
+  #pantallaFin{display:none;}
+  #pantallaFin h2.gana{color:var(--gold); text-shadow:0 0 16px rgba(240,192,64,.5);}
+  #pantallaFin h2.pierde{color:var(--red); text-shadow:0 0 16px rgba(224,85,85,.5);}
+  .linkPeligro{color:var(--dim); font-size:11px; text-decoration:underline; cursor:pointer; background:none; border:none; width:auto; text-transform:none; letter-spacing:0; font-weight:400; padding:2px;}
+
+  /* ---- Teléfono: desliza desde el borde derecho ---- */
+  #telefono{
+    position:absolute; top:10px; bottom:10px; right:-280px; width:262px; z-index:5;
+    background:linear-gradient(180deg,#191c22,#12141a);
+    border:2px solid #3a4150; border-radius:22px;
+    box-shadow:-8px 0 30px rgba(0,0,0,.6);
+    transition:right .35s cubic-bezier(.2,.8,.3,1.1);
+    display:flex; flex-direction:column; padding:14px 12px 12px; gap:8px;
+  }
+  #telefono.abierto{right:10px;}
+  #telefono .muesca{width:70px; height:5px; background:#3a4150; border-radius:3px; margin:0 auto 2px;}
+  #telTitulo{font-size:13px; font-weight:700; color:var(--cyan); text-align:center;}
+  #telRespeto{font-size:11px; color:var(--dim); text-align:center;}
+  .telBtn{
+    background:#232833; border:1px solid #3a4150; color:var(--txt);
+    text-transform:none; letter-spacing:0; font-weight:600; font-size:12px; padding:8px;
+  }
+  #telFeed{flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px;}
+  .post{background:#20242d; border:1px solid #30363f; border-radius:8px; padding:7px 8px; font-size:11.5px; line-height:1.4;}
+  .post.bien{border-color:#3a6a4a;}
+  .post.mal{border-color:#7a3a3a;}
+  .postMeta{color:var(--dim); font-size:10.5px; margin-top:3px;}
+  #telCerrar{
+    background:none; border:none; color:var(--dim); font-size:11px; width:auto;
+    text-transform:none; letter-spacing:0; font-weight:400; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>⬢ PATRULLAS</h1>
+  <p>CARTAGENA SE LEVANTA — táctica vecinal por turnos</p>
+</header>
+
+<div id="contenedor">
+  <div id="escenario">
+    <canvas id="juego" width="960" height="600"></canvas>
+
+    <!-- Teléfono deslizante -->
+    <div id="telefono">
+      <div class="muesca"></div>
+      <div id="telTitulo">Celular</div>
+      <div id="telRespeto"></div>
+      <div id="telAcciones"></div>
+      <div class="cajatitulo" style="margin-top:4px">Red vecinal</div>
+      <div id="telFeed"></div>
+      <button id="telCerrar">▼ guardar el celular (Esc)</button>
+    </div>
+
+    <div class="pantalla" id="pantallaIntro">
+      <h2>La cruzada</h2>
+      <p>
+        En cada barrio de Cartagena manda una banda. La policía está comprada.
+        Los vecinos se cansaron de esperar: con sus propias <b style="color:var(--cyan)">apps</b>
+        se organizaron en <b style="color:var(--cyan)">patrullas</b>.
+      </p>
+      <p>
+        La junta de vecinos prestó un dron — <b style="color:var(--cyan)">"La Garza"</b> —
+        para revelar el barrio, <b>identificar a los soldados uno por uno</b> y exponer a los
+        <b style="color:#ff9040">sapos</b>. Empiezas con 3 vecinos valientes: con
+        <b style="color:var(--gold)">respeto</b> del barrio, más gente se unirá a la cruzada.
+      </p>
+      <p class="sub">
+        Clic: seleccionar/mover/atacar · el dron revela la niebla · pisa las 📦 cajas para abrirlas ·
+        las armas se rompen con el uso · selecciona a alguien y usa su 📱 teléfono (T) para
+        fotografiar, publicar y convocar vecinos
+      </p>
+      <button id="btnEmpezar">Salir a patrullar</button>
+    </div>
+
+    <div class="pantalla" id="pantallaFin">
+      <h2 id="finTitulo"></h2>
+      <p id="finTexto"></p>
+      <button id="btnSiguiente">Siguiente barrio →</button>
+      <button class="linkPeligro" id="btnReiniciarTodo">borrar el progreso y empezar de cero</button>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="caja">
+      <div class="cajatitulo">Misión</div>
+      <div id="etiquetaTurno" class="jugador">—</div>
+      <div id="nombreBarrio"></div>
+    </div>
+    <div class="caja">
+      <div class="cajatitulo">Respeto del barrio · <span id="respetoNum">0</span>/100 — cartas 📇 <span id="cartasNum">0/3</span></div>
+      <div class="respetoWrap"><div id="respetoBarra" style="width:10%"></div></div>
+    </div>
+    <div class="caja">
+      <div class="cajatitulo">Unidad</div>
+      <div id="infoUnidad"><span style="color:var(--dim)">Pasa el cursor o selecciona una unidad</span></div>
+    </div>
+    <div class="caja" id="cajaPronostico" style="display:none">
+      <div class="cajatitulo">Pronóstico de combate</div>
+      <div id="pronostico"></div>
+    </div>
+    <button id="btnTelefono">📱 Usar teléfono <span style="opacity:.6">[T]</span></button>
+    <button id="btnEsperar" class="alerta">Esperar (no atacar)</button>
+    <button id="btnOperativo" class="dorado">🚨 Operativo municipal</button>
+    <button id="btnFinTurno">Terminar turno <span style="opacity:.6">[E]</span></button>
+    <div class="caja">
+      <div class="cajatitulo">Registro</div>
+      <div id="registro"></div>
+    </div>
+    <div class="caja" id="ayuda">
+      <div class="cajatitulo">Controles</div>
+      <kbd>Clic</kbd> seleccionar / mover / atacar · <kbd>T</kbd> teléfono<br>
+      <kbd>Clic der.</kbd>/<kbd>Esc</kbd> cancelar · <kbd>E</kbd> fin de turno<br>
+      Banca adyacente: clic para romperla (da 🪵 palo)
+    </div>
+  </div>
+</div>
+
+<script src="js/nucleo.js"></script>
+<script src="js/datos.js"></script>
+<script src="js/mapa.js"></script>
+<script src="js/unidades.js"></script>
+<script src="js/objetos.js"></script>
+<script src="js/combate.js"></script>
+<script src="js/ia.js"></script>
+<script src="js/telefono.js"></script>
+<script src="js/render.js"></script>
+<script src="js/interfaz.js"></script>
+<script src="js/principal.js"></script>
+</body>
+</html>
