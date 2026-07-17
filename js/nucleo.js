@@ -110,6 +110,7 @@ function guardar() {
       .map(u => ({
         clase: u.clase, nombre: u.nombre, nivel: u.nivel, exp: u.exp,
         stats: { ...u.stats }, puntos: u.puntos, slots: u.slots, armadura: u.armadura || null,
+        maestria: u.maestria || {},
         arma: u.arma ? { id: u.arma.id, usos: u.arma.usos } : null,
       }));
     localStorage.setItem(CLAVE_SAVE, JSON.stringify(cruzada));

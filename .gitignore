@@ -1,0 +1,8 @@
+# crudos de generación con IA (se regeneran con tools/generar_sprites.py)
+tools/ai_raw/
+# cachés de Python
+tools/__pycache__/
+__pycache__/
+*.pyc
+# credenciales / entorno
+.env

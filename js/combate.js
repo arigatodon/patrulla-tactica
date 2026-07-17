@@ -6,12 +6,30 @@
    ============================================================ */
 
 // ---------- Fórmulas ----------
-function armaDe(u) { return u.arma ? ARMAS[u.arma.id] : ARMAS.punos; }
+// armaDe devuelve el arma CON la maestría del portador aplicada
+// (cada nivel invertido dio +daño, +alcance o +resistencia al desgaste).
+function armaDe(u) {
+  const base = u.arma ? ARMAS[u.arma.id] : ARMAS.punos;
+  const m = u.maestria && u.arma && u.maestria[u.arma.id];
+  if (!m || (!m.dano && !m.alcance)) return base;
+  return { ...base, dano: base.dano + (m.dano || 0), rmax: base.rmax + Math.min(2, m.alcance || 0) };
+}
 const armaduraDe = u => u.armadura ? OBJETOS[u.armadura].defensa : 0;
+
+// con buena puntería (DES ≥ 7) las armas melé se pueden LANZAR a 2-3 casillas;
+// el arma queda tirada donde cayó (se puede recuperar)
+const puedeLanzar = u => u.equipo === 'jugador' && !u.noAtaca && u.arma
+  && u.arma.id !== 'punos' && armaDe(u).tipo === 'mele' && u.stats.DES >= 7;
+function rangoAtaqueDe(u) {
+  const a = armaDe(u);
+  return puedeLanzar(u) ? { rmin: a.rmin, rmax: Math.max(a.rmax, 3) } : { rmin: a.rmin, rmax: a.rmax };
+}
 
 function danoBase(att, def) {
   const a = armaDe(att);
-  const stat = a.tipo === 'mele' ? att.stats.FUE : att.stats.DES;
+  const dist = mdist(att.x, att.y, def.x, def.y);
+  // melé a distancia = lanzamiento: cuenta la puntería, no la fuerza
+  const stat = (a.tipo === 'mele' && dist <= 1) ? att.stats.FUE : att.stats.DES;
   let d = a.dano + Math.floor(stat * 0.8) - Math.floor(def.stats.VIT * 0.3)
         - terrenoEn(def.x, def.y).def - armaduraDe(def);
   if (def.marcado) d += 1;                    // enemigo fotografiado: debilidad conocida
@@ -25,16 +43,16 @@ function pronostico(att, def) {
   return { dano: `${b}–${b + 2}`, prec: precision(att, def) + '%', crit: criticoDe(att) + '%' };
 }
 function enRangoAtaque(u, tx, ty) {
-  const a = armaDe(u);
+  const r = rangoAtaqueDe(u);
   const d = mdist(u.x, u.y, tx, ty);
-  return !u.noAtaca && d >= a.rmin && d <= a.rmax;
+  return !u.noAtaca && d >= r.rmin && d <= r.rmax;
 }
 
 // blancos alcanzables moviendo: Map(enemigo -> [claves de celda de disparo])
 function opcionesAtaque(u, alcance) {
   const objetivos = new Map();
   if (u.noAtaca) return objetivos;
-  const a = armaDe(u);
+  const r = rangoAtaqueDe(u);
   const paradas = paradasDe(u, alcance);
   for (const e of vivos(u.equipo === 'jugador' ? 'enemigo' : 'jugador')) {
     // no atacas lo que no ves (los fotografiados quedan rastreados siempre)
@@ -42,7 +60,7 @@ function opcionesAtaque(u, alcance) {
     const celdas = paradas.filter(key => {
       const [x, y] = desClave(key);
       const d = mdist(x, y, e.x, e.y);
-      return d >= a.rmin && d <= a.rmax;
+      return d >= r.rmin && d <= r.rmax;
     });
     if (celdas.length) objetivos.set(e, celdas);
   }
@@ -69,6 +87,7 @@ async function golpe(att, def) {
   if (Math.abs(sdx) > 1) { att.cara = sdx > 0 ? 1 : -1; def.cara = -att.cara; }
   const distancia = mdist(att.x, att.y, def.x, def.y) > 1;
 
+  att.pose = 'ataca';
   if (distancia) { SFX.tiro(); trazadora(att, def); }
   else {
     SFX.golpe();
@@ -79,18 +98,32 @@ async function golpe(att, def) {
     });
     att.gx = ox; att.gy = oy;
   }
+  // lanzamiento de arma melé: vuela hacia el objetivo y queda tirada allá
+  const armaLanzada = (a.tipo === 'mele' && distancia) ? att.arma : null;
   gastarArma(att);
+  if (armaLanzada) {
+    if (att.arma === armaLanzada) att.arma = instanciarArma('punos');   // ya no está en la mano
+    if (armaLanzada.usos > 0) {
+      soltarEnPiso(def.x, def.y, armaLanzada);
+      registrar(`🎯 ${att.nombre} lanza ${a.icono} ${a.nombre}: quedó tirada allá (písala para recuperarla).`);
+    } else {
+      registrar(`🎯 ${att.nombre} lanza ${a.icono} ${a.nombre}… y se hizo pedazos con el impacto.`);
+    }
+    refrescarPanel();
+  }
 
   // ¿esquiva? (azar de partida → rnd())
   if (rnd() * 100 > precision(att, def)) {
     flotante(def.x, def.y, '¡esquiva!', '#9fd6ff');
     await dormir(250);
+    att.pose = null;
     return 0;
   }
   let dano = danoBase(att, def) + Math.floor(rnd() * 3);
   const crit = rnd() * 100 < criticoDe(att);
   if (crit) dano = Math.floor(dano * 1.6);
   def.pv = Math.max(0, def.pv - dano);
+  def.pose = 'herido';
   partida.sacudida = crit ? 9 : 6;
   SFX.golpe();
   flotante(def.x, def.y, (crit ? '¡CRÍTICO! ' : '') + '-' + dano, crit ? '#f0c040' : '#ff6b5e');
@@ -102,6 +135,7 @@ async function golpe(att, def) {
   if (def.equipo === 'enemigo')
     for (const al of vivos('enemigo')) if (mdist(al.x, al.y, def.x, def.y) <= 3) al.aggro = true;
   await dormir(300);
+  att.pose = null; def.pose = null;
   if (def.pv <= 0) await morir(def, att);
   return dano;
 }
@@ -204,7 +238,8 @@ async function morir(u, autor) {
 
   if (u.equipo === 'enemigo') {
     // exp para el autor (o el escuadrón si murió por fuego)
-    const exp = u.sapo ? 8 : 15 + u.nivel * 8 + (u.jefe ? 30 : 0);
+    // los yonkis dan poca exp: las olas no son granja, son castigo
+    const exp = u.yonki ? 5 : u.sapo ? 8 : 15 + u.nivel * 8 + (u.jefe ? 30 : 0);
     if (autor && autor.equipo === 'jugador') darExp(autor, exp);
     else if (!autor) for (const p of vivos('jugador')) darExp(p, Math.ceil(exp / 3));
 
@@ -214,6 +249,8 @@ async function morir(u, autor) {
     } else if (u.esPolicia) {
       registrar('🚓 Cayó un carabinero (vendido, pero uniformado). Esto trae cola.', 'mal');
       cambiarRespeto(-4, 'pegarle a un uniformado asusta al barrio');
+    } else if (u.yonki) {
+      registrar(`${u.nombre} cae. Vienen más detrás.`, '');
     } else {
       registrar(`💀 ${u.nombre} de la banda queda fuera.`, 'bien');
       partida.hazanas.push(u.jefe ? 'jefe' : 'soldado');

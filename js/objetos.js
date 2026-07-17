@@ -27,6 +27,7 @@ function tirarLoot() {
 function dropDeEnemigo(e) {
   const r = rnd();
   if (e.jefe) return instanciarObjeto('carta');                 // el jefe siempre suelta carta municipal
+  if (e.yonki) return r < 0.10 ? instanciarArma('piedras', 3) : null;   // las olas no son granja
   if (r < 0.20 && e.arma && e.arma.id !== 'punos')
     return instanciarArma(e.arma.id, Math.max(1, Math.ceil(defDe(e.arma).usos / 3)));
   if (r < 0.35) return tirarLoot();
@@ -81,6 +82,11 @@ function entregar(u, item) {
     if (u.armadura) soltarEnPiso(u.x, u.y, instanciarObjeto(u.armadura));
     u.armadura = item.id;
     registrar(`${d.icono} <b>${u.nombre}</b> se pone ${d.nombre.toLowerCase()}: +${d.defensa} de defensa.`, 'bien');
+    refrescarPanel();
+    return;
+  }
+  if (d.tipo === 'material') {   // bencina y similares van a la mochila
+    meterMochila(u, item);
     refrescarPanel();
     return;
   }
@@ -146,6 +152,9 @@ function equiparDeMochila(u, idx) {
 // ---------- Durabilidad ----------
 function gastarArma(u) {
   if (!u.arma || u.arma.usos === Infinity) return;
+  // maestría en resistencia: chance de no gastar el arma
+  const m = u.maestria && u.maestria[u.arma.id];
+  if (m && m.usos && rnd() < Math.min(0.6, 0.15 * m.usos)) return;
   u.arma.usos--;
   if (u.arma.usos <= 0) {
     const d = defDe(u.arma);
@@ -188,3 +197,42 @@ function romperMueble(u, x, y) {
 
 // compat: la banca clásica sigue existiendo en el guion
 function romperBanca(u, x, y) { romperMueble(u, x, y); }
+
+// ---------- Crafteo: bencina + botella = molotov ----------
+function puedeArmarMolotov(u) {
+  if (u.noAtaca) return false;
+  const tieneBencina = u.mochila.some(i => !i.esArma && i.id === RECETA_MOLOTOV.material);
+  const tieneBotella = (u.arma && u.arma.id === RECETA_MOLOTOV.arma)
+    || u.mochila.some(i => i.esArma && i.id === RECETA_MOLOTOV.arma);
+  return tieneBencina && tieneBotella;
+}
+
+function armarMolotov(u) {
+  if (!puedeArmarMolotov(u)) return false;
+  const iB = u.mochila.findIndex(i => !i.esArma && i.id === RECETA_MOLOTOV.material);
+  u.mochila.splice(iB, 1);
+  const iBot = u.mochila.findIndex(i => i.esArma && i.id === RECETA_MOLOTOV.arma);
+  if (iBot >= 0) u.mochila.splice(iBot, 1);
+  else u.arma = instanciarArma('punos');    // usó la botella que tenía en la mano
+  SFX.raro();
+  flotante(u.x, u.y, '🔥 ¡Molotov!', '#ff9040');
+  registrar(`🧪 <b>${u.nombre}</b> arma una molotov con la botella y la bencina.`, 'imp');
+  entregar(u, instanciarArma('molotov'));
+  return true;
+}
+
+// ---------- Bencinera: sacar bencina cuesta el turno ----------
+function esBencineraConCombustible(x, y) {
+  return enMapa(x, y) && mapa.celdas[y][x] === 'E' && (mapa.bencinaRestante || 0) > 0;
+}
+
+function sacarBencina(u) {
+  if ((mapa.bencinaRestante || 0) <= 0) return false;
+  mapa.bencinaRestante--;
+  SFX.loot();
+  flotante(u.x, u.y, '⛽ Bencina', '#57c8e8');
+  registrar(`⛽ ${u.nombre} saca bencina de la bomba (pierde el turno).` +
+    (mapa.bencinaRestante ? '' : ' La bomba quedó seca.'));
+  entregar(u, instanciarObjeto('bencina'));
+  return true;
+}

@@ -59,7 +59,10 @@
     t('prologo-sin-jefe', !vivos('enemigo').some(e => e.jefe));
     const pt = mapa.puntos[0];
     t('prologo-punto', pt && mapa.celdas[pt.y][pt.x] === 'P');
-    t('prologo-molotov-equipada', vivos('jugador')[0].arma.id === 'molotov');
+    // la molotov va GUARDADA en la mochila (no equipada: se lanza a propósito)
+    const lider0 = vivos('jugador')[0];
+    t('prologo-molotov-guardada', lider0.arma.id !== 'molotov' &&
+        lider0.mochila.some(i => i.esArma && i.id === 'molotov'));
     t('prologo-objetivo-ui', $('objetivoTexto').textContent.includes('punto de venta'));
     t('mapa-grande', mapa.cols >= 18 && mapa.filas >= 13);
     t('slots-base-3', vivos('jugador')[0].slots === 3);
@@ -77,8 +80,29 @@
     centrarCamara();
     t('zoom-encuadra', zoom > 0.4 && zoom <= 1);
 
-    // prender el punto de cerca y escapar al oeste
+    // ============ CRAFTEO: bencina + botella = molotov ============
+    const crafteador = vivos('jugador')[1];
+    crafteador.mochila = [];
+    entregar(crafteador, instanciarObjeto('bencina'));
+    t('bencina-a-mochila', crafteador.mochila.some(i => i.id === 'bencina'));
+    crafteador.arma = instanciarArma('botella');
+    t('receta-lista', puedeArmarMolotov(crafteador));
+    armarMolotov(crafteador);
+    t('molotov-armada', (crafteador.arma.id === 'molotov' ||
+        crafteador.mochila.some(i => i.esArma && i.id === 'molotov')) &&
+        !crafteador.mochila.some(i => i.id === 'bencina'));
+
+    // bencinera del mapa: sacar bencina gasta cargas
+    if (mapa.rasgos.bencinera) {
+      const cargas = mapa.bencinaRestante;
+      sacarBencina(crafteador);
+      t('bencinera-da-bencina', mapa.bencinaRestante === cargas - 1 &&
+          crafteador.mochila.some(i => i.id === 'bencina'));
+    } else t('bencinera-da-bencina', mapa.bencinaRestante === 0);   // esta semilla no la trajo
+
+    // ============ PRÓLOGO: quemar y escapar ============
     const ruth = vivos('jugador')[0];
+    ruth.arma = ruth.mochila.find(i => i.id === 'molotov') || ruth.arma;
     const [ax, ay] = celdaLibreCerca(pt.x - 1, pt.y);
     ruth.x = ax; ruth.y = ay; ruth.gx = ax; ruth.gy = ay;
     actualizarVision();
@@ -287,6 +311,51 @@
     const fuegosAntes = mapa.fuego.size;
     await ataqueArea(romperdor, victima.x, victima.y);
     t('fuegos-aturden', (victima.pv <= 0 || victima.aturdido >= 1) && mapa.fuego.size === fuegosAntes);
+
+    // ============ MAESTRÍA DE ARMAS ============
+    const maestro = vivos('jugador').find(u => !u.vuela);
+    maestro.arma = instanciarArma('cuchilla');
+    maestro.puntos = 2;
+    subirMaestria(maestro); subirMaestria(maestro);
+    const mm = maestro.maestria.cuchilla;
+    t('maestria-sube', mm.nivel === 2 && maestro.puntos === 0 &&
+        (mm.dano + mm.alcance + mm.usos) === 2);
+    t('maestria-aplica', armaDe(maestro).dano === ARMAS.cuchilla.dano + mm.dano);
+
+    // ============ LANZAR ARMA MELÉ CON PUNTERÍA (DES ≥ 7) ============
+    const lanzador = vivos('jugador').find(u => u.stats.DES >= 7 && !u.noAtaca)
+      || (() => { const q = vivos('jugador').find(u => !u.vuela); q.stats.DES = 8; return q; })();
+    lanzador.arma = instanciarArma('fierro');
+    t('lanzable-detecta', puedeLanzar(lanzador) && rangoAtaqueDe(lanzador).rmax >= 3);
+    const blanco = vivos('enemigo').find(e => !e.sapo && e.pv > 0);
+    if (blanco) {
+      const [lx, ly] = celdaLibreCerca(blanco.x - 3, blanco.y);
+      lanzador.x = lx; lanzador.y = ly; lanzador.gx = lx; lanzador.gy = ly;
+      actualizarVision();
+      if (mdist(lx, ly, blanco.x, blanco.y) >= 2 && mdist(lx, ly, blanco.x, blanco.y) <= 3) {
+        await golpe(lanzador, blanco);
+        t('lanzamiento-suelta-arma', lanzador.arma.id === 'punos' &&
+            sueltos.some(s => s.item.esArma && s.item.id === 'fierro'));
+      } else t('lanzamiento-suelta-arma', true);   // no quedó a rango en esta semilla
+    } else t('lanzamiento-suelta-arma', true);
+
+    // ============ OLAS DE YONKIS ============
+    const antesYonkis = vivos('enemigo').filter(e => e.yonki).length;
+    partida.ronda = partida.rondaOlas;   // forzar la primera ola
+    partida.terminada = false;
+    await olaDeYonkis();
+    const ola1 = vivos('enemigo').filter(e => e.yonki).length - antesYonkis;
+    t('ola-1-llega', ola1 >= 1 && ola1 <= OLA_TAMANO(1));
+    partida.ronda++;
+    await olaDeYonkis();
+    const ola2 = vivos('enemigo').filter(e => e.yonki).length - antesYonkis - ola1;
+    t('ola-2-mas-grande', ola2 >= ola1);
+    t('yonki-con-piedras', vivos('enemigo').some(e => e.yonki && e.arma.id === 'piedras'));
+    // banda muerta con misión pendiente → las olas se adelantan
+    for (const e of vivos('enemigo')) if (!e.yonki) e.pv = 0;
+    t('olas-se-adelantan', rondaDeOlas() <= partida.ronda + 1);
+    for (const e of unidades) if (e.equipo === 'enemigo' && e.yonki) e.pv = 0;   // limpiar
+    partida.ronda = 2;
 
     // --- final (Las Tomas de La Punta) y rotación procedural ---
     cruzada.barrio = 5;

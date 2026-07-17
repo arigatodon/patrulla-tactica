@@ -170,6 +170,7 @@ function iniciarMision(semillaOpcional) {
     banner: null, sacudida: 0, operativoRondas: 0, fotosEsteTurno: 0, hazanas: [],
     apagonRondas: 0, murgaRondas: 0, usosHabilidad: usos,
     policia: null, policiaLlamada: false,
+    rondaOlas: RONDA_OLAS_BASE + Math.floor(nBarrio / 2),
   });
   actualizarVision();
 

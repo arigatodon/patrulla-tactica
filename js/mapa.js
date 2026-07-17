@@ -62,6 +62,20 @@ function _generarCandidato(dificultad, tema) {
   // 5) rasgos del sector (cancha, rieles, dunas, rampas de skate)
   const rasgos = _aplicarTema(celdas, filas, cols, tema);
 
+  // 5b) una bencinera por sector: fuente de bencina para armar molotovs
+  let intentosB = 120;
+  while (intentosB-- > 0) {
+    const bx = rndInt(3, cols - 2), by = rndInt(1, filas - 2);
+    if (!'.,'.includes(celdas[by][bx])) continue;
+    const libres = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) =>
+      by + dy >= 0 && by + dy < filas && bx + dx >= 0 && bx + dx < cols &&
+      !TERRENOS[celdas[by + dy][bx + dx]].bloquea).length;
+    if (libres < 3) continue;
+    celdas[by][bx] = 'E';
+    rasgos.bencinera = { x: bx, y: by };
+    break;
+  }
+
   // 6) detalle sobre suelo transitable: árboles en parque, bancas, coberturas y cajas
   const cajas = rndInt(4, 5 + Math.min(3, dificultad));
   let cajasPuestas = 0;
@@ -127,6 +141,7 @@ function _armarMapa(celdas, filas, cols, rasgos = {}) {
   return {
     celdas, filas, cols,
     rasgos,
+    bencinaRestante: rasgos.bencinera ? 2 : 0,
     puntos: [],               // puntos de venta: {x, y, quemado}
     // niebla: 0 oculto · 1 explorado (recuerdo, sin unidades) · 2 visible
     niebla: Array.from({ length: filas }, () => Array(cols).fill(0)),

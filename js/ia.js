@@ -86,10 +86,49 @@ async function turnoEnemigo() {
   await cerrarRondaEnemiga();
 }
 
+// ---------- Olas de yonkis ----------
+// La banda del sector muerta no significa paz: si el objetivo sigue pendiente,
+// los yonkis huelen la pelea. Y pasada cierta ronda llegan igual, en olas
+// cada vez más grandes: conviene ganar "más o menos rápido".
+function rondaDeOlas() {
+  const bandaViva = vivos('enemigo').some(e => !e.yonki && !e.esPolicia);
+  const base = partida.rondaOlas || (RONDA_OLAS_BASE + Math.floor(partida.barrio / 2));
+  return bandaViva ? base : Math.min(base, partida.ronda + 1);
+}
+
+async function olaDeYonkis() {
+  if (partida.terminada) return;
+  const inicio = rondaDeOlas();
+  if (partida.ronda === inicio - 1) {
+    registrar('⚠️ Se escuchan gritos en los pasajes… <b>los yonkis huelen la pelea</b>. Termina rápido.', 'mal');
+    SFX.notif();
+    return;
+  }
+  if (partida.ronda < inicio) return;
+  const n = partida.ronda - inicio + 1;
+  const tamano = OLA_TAMANO(n);
+  mostrarBanner(`💀 OLA ${n} DE YONKIS`, '#a86ae8');
+  registrar(`💀 <b>Ola ${n}:</b> ${tamano} yonkis de la pasta base entran al sector tirando piedras.`, 'mal');
+  SFX.muerte();
+  for (let i = 0; i < tamano; i++) {
+    // aparecen por los bordes este/norte/sur, nunca por tu retaguardia
+    const borde = Math.floor(rnd() * 3);
+    const bx = borde === 0 ? mapa.cols - 1 : rndInt(Math.floor(mapa.cols / 3), mapa.cols - 1);
+    const by = borde === 0 ? rndInt(0, mapa.filas - 1) : (borde === 1 ? 0 : mapa.filas - 1);
+    const [fx, fy] = celdaLibreCerca(bx, by);
+    if (unidadEn(fx, fy)) continue;
+    const y = crearUnidad({ equipo: 'enemigo', clase: 'yonki', nivel: 1, nombre: 'Yonki', x: fx, y: fy });
+    y.aggro = true;
+    unidades.push(y);
+  }
+  await dormir(600);
+}
+
 // cierre común de la ronda enemiga (también lo usa la Murga)
 async function cerrarRondaEnemiga() {
   await aplicarFuego();
   if (partida.terminada) return;
+  await olaDeYonkis();
   if (partida.operativoRondas > 0) {
     partida.operativoRondas--;
     if (partida.operativoRondas === 0) registrar('🚨 La patrulla municipal se retiró de la zona.');

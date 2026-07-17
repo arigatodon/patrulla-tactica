@@ -58,6 +58,10 @@ function manejarPulsacion(px, py) {
       romperMueble(sel, x, y);
       return void terminarAccion(sel);
     }
+    // bencinera adyacente: sacar bencina para armar molotovs
+    if (esBencineraConCombustible(x, y) && mdist(sel.x, sel.y, x, y) === 1 && !sel.noAtaca) {
+      if (sacarBencina(sel)) return void terminarAccion(sel);
+    }
     // punto de venta: prenderlo de cerca o lanzarle la molotov
     const pv = puntoEn(x, y);
     if (pv && !pv.quemado) return void interactuarPunto(sel, pv);
@@ -241,14 +245,31 @@ function _retrato(u) {
     g.addColorStop(1, 'rgba(57,197,224,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.translate(60, 126);
-    ctx.scale(3.2, 3.2);
-    if (u.vehiculo) dibVehiculo(u);
-    const S = { dron: dibDron }[u.sprite] || dibHumano;
-    S(u);
+    const img = SPRITES_IMG[u.sprite] && SPRITES_IMG[u.sprite].parado;
+    if (img) {
+      // retrato con el sprite generado por IA, ampliado
+      const alto = 118, ancho = alto * img.width / img.height;
+      ctx.drawImage(img, 60 - ancho / 2, 132 - alto, ancho, alto);
+    } else if (SPRITES_IMG[u.sprite]) {
+      // la imagen aún no cargó: reintentar en cuanto esté (si el diálogo sigue)
+      setTimeout(() => { if (dialogoActivo) _retrato(_unidadDeLinea(dialogoActivo.lineas[dialogoActivo.i])); }, 450);
+      _retratoVector(u);
+    } else {
+      _retratoVector(u);
+    }
   } finally {
     ctx = prev;
   }
+}
+
+function _retratoVector(u) {
+  ctx.save();
+  ctx.translate(60, 126);
+  ctx.scale(3.2, 3.2);
+  if (u.vehiculo) dibVehiculo(u);
+  const S = { dron: dibDron }[u.sprite] || dibHumano;
+  S(u);
+  ctx.restore();
 }
 
 // ---------- Punto de venta: prender de cerca o molotov a distancia ----------
@@ -302,19 +323,26 @@ function fichaUnidad(u) {
         ${esJugador && !u.vuela ? `<span title="Espacios de carga">🎒 <b>${u.slots}</b>${
           puedeGastar && u.slots < 6 ? `<a class="mas" data-uid="${u.id}" data-slot="1">+</a>` : ''}</span>` : ''}
       </div>`;
+  const m = u.maestria && u.arma ? u.maestria[u.arma.id] : null;
   const armaHTML = u.noAtaca
     ? '<div style="color:var(--dim)">🚫 No ataca — revela el mapa y fotografía</div>'
-    : `<div class="armaEquipada">${a.icono} <b>${a.nombre}</b> · daño ${a.dano} · rango ${a.rmin === a.rmax ? a.rmax : a.rmin + '–' + a.rmax}
+    : `<div class="armaEquipada">${a.icono} <b>${a.nombre}</b>${m ? ` <span style="color:var(--gold)">Nv${m.nivel}</span>` : ''}
+       · daño ${a.dano} · rango ${a.rmin === a.rmax ? a.rmax : a.rmin + '–' + a.rmax}
        · ${u.arma.usos === Infinity ? '∞' : u.arma.usos + ' usos'}
+       ${esJugador && typeof puedeLanzar === 'function' && puedeLanzar(u) ? ' · 🎯 lanzable' : ''}
        ${u.vehiculo ? ' · ' + (u.vehiculo === 'skate' ? '🛹' : '🛴') : ''}
-       ${u.armadura ? ` · ${OBJETOS[u.armadura].icono} +${OBJETOS[u.armadura].defensa} def` : ''}</div>`;
+       ${u.armadura ? ` · ${OBJETOS[u.armadura].icono} +${OBJETOS[u.armadura].defensa} def` : ''}
+       ${puedeGastar && u.arma.id !== 'punos' && (!m || m.nivel < 5)
+         ? `<a class="mas" data-uid="${u.id}" data-maestria="1" title="Gastar 1 punto: mejora al azar del arma">⭐+</a>` : ''}</div>`;
   const mochilaHTML = esJugador && !u.vuela
     ? `<div class="mochila">🎒 ${u.mochila.map((it, i) => {
         const d = defDe(it), rz = rarezaDe(it);
         const accion = d.tipo === 'cura' ? `data-cura="${i}"` : `data-equipa="${i}"`;
         return `<a class="itemMochila" ${accion} data-uid="${u.id}" style="color:${rz.color}"
                  title="${d.nombre}${d.tipo === 'cura' ? ' (usar = acción)' : ' (equipar gratis: muestra su rango)'}">${d.icono}</a>`;
-      }).join(' ')}${'<span class="slotVacio">▫</span>'.repeat(Math.max(0, u.slots - u.mochila.length))}</div>` : '';
+      }).join(' ')}${'<span class="slotVacio">▫</span>'.repeat(Math.max(0, u.slots - u.mochila.length))}
+      ${puedeArmarMolotov(u) && !u.actuo && partida.fase === 'jugador'
+        ? `<a class="craftear" data-uid="${u.id}" title="Bencina + botella: gratis, no gasta el turno">🧪 armar molotov</a>` : ''}</div>` : '';
   return `
     <div class="uname ${esJugador ? 'jugador' : 'enemigo'}">${u.nombre}
       ${u.jefe ? ' <span style="color:var(--gold)">$ OBJETIVO</span>' : ''}
@@ -348,6 +376,14 @@ function refrescarPanel() {
     : partida.tipoMision === 'puntos'
       ? `🔥 Puntos de venta quemados: <b>${mapa ? mapa.puntos.length - puntosVivos().length : 0}/${mapa ? mapa.puntos.length : 0}</b>`
       : `💀 Elimina al vendedor <b style="color:var(--gold)">$</b> de ${partida.banda || 'la banda'}`;
+  // aviso de olas de yonkis
+  if (mapa && !partida.terminada && typeof rondaDeOlas === 'function') {
+    const faltan = rondaDeOlas() - partida.ronda;
+    if (faltan <= 0)
+      $('objetivoTexto').innerHTML += `<br>💀 <b style="color:#a86ae8">¡Olas de yonkis en curso!</b>`;
+    else if (faltan <= 3)
+      $('objetivoTexto').innerHTML += `<br>⚠️ Yonkis en <b>${faltan}</b> ronda${faltan === 1 ? '' : 's'} — apura`;
+  }
 
   // habilidades de crew ganadas
   const cont = $('habilidadesCrew');
@@ -386,7 +422,15 @@ function refrescarPanel() {
       ev.stopPropagation();
       const u = unidades.find(x => x.id == el.dataset.uid);
       if (!u) return;
-      if (el.dataset.slot) subirSlots(u); else subirStat(u, el.dataset.stat);
+      if (el.dataset.maestria) subirMaestria(u);
+      else if (el.dataset.slot) subirSlots(u);
+      else subirStat(u, el.dataset.stat);
+    };
+  for (const el of document.querySelectorAll('#infoUnidad .craftear'))
+    el.onclick = ev => {
+      ev.stopPropagation();
+      const u = unidades.find(x => x.id == el.dataset.uid);
+      if (u && !partida.ocupado && partida.fase === 'jugador') armarMolotov(u);
     };
   for (const el of document.querySelectorAll('#infoUnidad .itemMochila'))
     el.onclick = ev => {
@@ -433,6 +477,9 @@ function infoCelda(x, y) {
   if (ch === 'O' && !mapa.bancasRotas.has(clave(x, y))) extra += ' · rompible: nunca se sabe qué hay adentro (cuesta el turno)';
   if (ch === 'P') { const p = puntoEn(x, y); extra += p && p.quemado ? ' · 🔥 ya arde' : ' · 🎯 quémalo: molotov o de cerca'; }
   if (ch === 'K') extra += ' · skatepark';
+  if (ch === 'E') extra += (mapa.bencinaRestante || 0) > 0
+    ? ` · ⛽ quedan ${mapa.bencinaRestante} cargas: sacar bencina cuesta el turno`
+    : ' · ⛽ seca';
   if (mapa.fuego.has(clave(x, y))) extra += ' · 🔥 ardiendo';
   const s = sueltos.find(o => o.x === x && o.y === y);
   if (s && visible(x, y)) extra += ` · en el piso: ${defDe(s.item).icono} ${defDe(s.item).nombre}`;

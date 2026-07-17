@@ -32,13 +32,14 @@ function crearUnidad(def) {
     nivel: def.nivel || 1, exp: def.exp || 0, puntos: def.puntos || 0,
     stats: def.stats ? { ...def.stats } : { ...base.stats },
     vuela: !!base.vuela, noAtaca: !!base.noAtaca,
-    jefe: !!base.jefe, sapo: !!base.sapo,
+    jefe: !!base.jefe, sapo: !!base.sapo, yonki: !!base.yonki,
     vision: base.vision || VISION_HUMANO,
     vehiculo: base.vehiculo || null,   // 'skate' | 'scooter': +2 movimiento
     armadura: def.armadura || null,    // 'casco' | 'chaleco': defensa extra
     aggro: false, actuo: false, aturdido: 0, disuadido: false,
     marcado: false,            // fotografiado: stats visibles y +daño recibido leve
     slots: def.slots || 3,     // capacidad de carga (ampliable con puntos)
+    maestria: def.maestria ? JSON.parse(JSON.stringify(def.maestria)) : {},   // nivel por arma
     mochila: [],               // objetos de reserva (hasta u.slots)
     balanceo: Math.random() * Math.PI * 2,
     aggroBase: base.aggro || 0,
@@ -83,6 +84,31 @@ function subirStat(u, stat) {
   guardar();
 }
 
+// ---------- Maestría de armas ----------
+// Gastar un punto de nivel en el ARMA EQUIPADA: cada nivel da una mejora al
+// azar según el arma — +daño, +alcance (a distancia, máx. +2) o +resistencia
+// al desgaste. Máximo nivel 5 por arma.
+function subirMaestria(u) {
+  if (u.puntos <= 0 || u.noAtaca || !u.arma || u.arma.id === 'punos') return;
+  const id = u.arma.id, base = ARMAS[id];
+  u.maestria[id] = u.maestria[id] || { nivel: 0, dano: 0, alcance: 0, usos: 0 };
+  const m = u.maestria[id];
+  if (m.nivel >= 5) return;
+  m.nivel++;
+  u.puntos--;
+  const r = Math.random();
+  let mejora;
+  if (base.tipo === 'mele') mejora = r < 0.6 ? 'dano' : 'usos';
+  else mejora = r < 0.45 ? 'dano' : (r < 0.75 && m.alcance < 2 ? 'alcance' : 'usos');
+  m[mejora]++;
+  const texto = { dano: 'pega más fuerte (+1 daño)', alcance: 'llega más lejos (+1 alcance)', usos: 'aguanta más el desgaste' }[mejora];
+  SFX.nivel();
+  flotante(u.x, u.y, `⭐ ${base.icono} Nv ${m.nivel}`, '#f0c040');
+  registrar(`⭐ <b>${u.nombre}</b> domina mejor ${base.icono} ${base.nombre} (Nv ${m.nivel}): ${texto}.`, 'imp');
+  refrescarPanel();
+  guardar();
+}
+
 // gastar un punto de nivel en un slot más de mochila (máx. 6)
 function subirSlots(u) {
   if (u.puntos <= 0 || u.slots >= 6) return;
@@ -101,6 +127,7 @@ function armarEscuadron() {
     for (const p of cruzada.plantilla)
       lista.push({ equipo: 'jugador', clase: p.clase, nombre: p.nombre, nivel: p.nivel,
                    exp: p.exp, puntos: p.puntos, stats: p.stats, slots: p.slots, armadura: p.armadura,
+                   maestria: p.maestria,
                    arma: p.arma ? instanciarArma(p.arma.id, p.arma.usos) : (CLASES[p.clase].arma ? undefined : null) });
     // el dron siempre vuelve (la junta lo vuelve a prestar)
     if (!lista.some(l => l.clase === 'dron'))
@@ -125,12 +152,9 @@ function poblarBarrio(dificultad, capitulo) {
     unidades.push(u);
     sy++;
   }
-  // en el prólogo, el líder lleva la molotov de la noche (su arma pasa a la mochila)
-  if (esMolotov) {
-    const portador = vivos('jugador')[0];
-    if (portador.arma && portador.arma.id !== 'punos') meterMochila(portador, portador.arma);
-    portador.arma = instanciarArma('molotov');
-  }
+  // en el prólogo, el líder lleva la molotov de la noche GUARDADA en la mochila
+  // (así no se lanza por accidente: se equipa a propósito cuando toque)
+  if (esMolotov) meterMochila(vivos('jugador')[0], instanciarArma('molotov'));
   // banda: jefe al fondo este (salvo prólogo), soldados en los 2/3 orientales, sapos sueltos
   const nivel = dificultad;
   if (!esMolotov) {

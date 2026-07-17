@@ -134,6 +134,9 @@ siempre aparece un relevo. Mapas generados al azar, dificultad creciente.
 - **Nada de armamento militar.** El arsenal es de barrio: lo mejor que puede caer es una pistola vieja o una katana de colección.
 - **El dron es prestado.** Si lo derriban, la junta de Crespo no presta otro hasta la siguiente misión.
 - **El respeto lo es todo.** Sin el barrio detrás, la patrulla es solo otra banda.
+- **La molotov no nace: se arma.** Botella (de los basureros) + bencina (de cajas o de la bencinera del sector). La del prólogo va guardada en la mochila: se equipa a propósito.
+- **La noche tiene reloj.** Si la pelea se alarga —o si la banda cae y el objetivo sigue pendiente— llegan **olas de yonkis de la pasta base** tirando piedras, cada vez más grandes. Se gana rápido o no se gana.
+- **Las armas se dominan.** Cada punto de nivel invertido en el arma equipada da una mejora al azar: pega más fuerte, llega más lejos o aguanta más. Y con puntería alta (DES ≥ 7), cualquier herramienta melé se puede **lanzar** — y recoger donde cayó.
 
 ## Mapeo historia → sistemas
 

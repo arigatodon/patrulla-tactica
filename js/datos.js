@@ -23,6 +23,7 @@ const TERRENOS = {
   'K': { nombre: 'Rampa de skate', costo: 0, def: 0, bloquea: true, color: '#8a8f98' },
   'S': { nombre: 'Silla',     costo: 0, def: 0, bloquea: true,  color: '#5d626c', rompible: true },
   'O': { nombre: 'Basurero',  costo: 0, def: 0, bloquea: true,  color: '#5d626c', rompible: true },
+  'E': { nombre: 'Bencinera', costo: 0, def: 0, bloquea: true,  color: '#4a4440' },
 };
 
 // ---------- Rarezas (aura de color) ----------
@@ -67,7 +68,10 @@ const OBJETOS = {
   chaleco:  { nombre: 'Chaleco',  icono: '🦺', tipo: 'armadura', defensa: 2, rareza: 'rara' },
   carta:    { nombre: 'Carta municipal', icono: '📇', tipo: 'carta', rareza: 'legendaria' },
   skate:    { nombre: 'Skate',    icono: '🛹', tipo: 'vehiculo', movExtra: 2, rareza: 'rara' },
+  bencina:  { nombre: 'Bencina',  icono: '⛽', tipo: 'material', rareza: 'pococomun' },
 };
+// recetas de crafteo: bencina + botella = molotov (gratis, desde la ficha)
+const RECETA_MOLOTOV = { material: 'bencina', arma: 'botella', resultado: 'molotov' };
 
 // Loot de cajas: qué puede salir y con qué peso (la rareza del arma manda su aura)
 const LOOT_CAJA = [
@@ -78,7 +82,7 @@ const LOOT_CAJA = [
   { peso: 3, item: 'fuegos' }, { peso: 1.5, item: 'katana' },
   { peso: 9, item: 'vendas' }, { peso: 7, item: 'empanada' }, { peso: 6, item: 'bebida' },
   { peso: 6, item: 'botiquin' }, { peso: 4, item: 'casco' }, { peso: 2, item: 'chaleco' },
-  { peso: 2.5, item: 'carta' },
+  { peso: 5, item: 'bencina' }, { peso: 2.5, item: 'carta' },
 ];
 // lo que puede aparecer al volcar un basurero
 const LOOT_BASURERO = [
@@ -125,7 +129,14 @@ const ENEMIGOS = {
   cholo:     { nombre: 'Cholo',     sprite: 'soldado', stats: { FUE: 4, AGI: 3, VIT: 6, DES: 5, SUE: 3 }, arma: 'ametralleta', aggro: 6 },
   scooter:   { nombre: 'Soldado en scooter', sprite: 'scooter', stats: { FUE: 4, AGI: 7, VIT: 4, DES: 4, SUE: 3 }, arma: 'cuchilla', aggro: 8, vehiculo: 'scooter' },
   policia:   { nombre: 'Carabinero', sprite: 'policia', stats: { FUE: 4, AGI: 4, VIT: 6, DES: 6, SUE: 3 }, arma: 'pistola', aggro: 99 },
+  yonki:     { nombre: 'Yonki',      sprite: 'yonki', stats: { FUE: 3, AGI: 5, VIT: 2, DES: 4, SUE: 1 }, arma: 'piedras', aggro: 99, yonki: true },
 };
+
+// ---------- Olas de yonkis (la misión no se puede eternizar) ----------
+// Desde cierta ronda —o si la banda cayó y el objetivo sigue pendiente—
+// empiezan a llegar olas de yonkis de la pasta base, cada vez más grandes.
+const RONDA_OLAS_BASE = 8;      // + barrio/2: sectores difíciles dan más aire
+const OLA_TAMANO = n => 1 + n;  // ola 1: 2 yonkis, ola 2: 3, ola 3: 4…
 
 // ---------- Llamada a la policía ----------
 const PROB_POLICIA_VIENE = 0.30;   // 30%: puede que ni aparezcan

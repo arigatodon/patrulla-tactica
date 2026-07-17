@@ -7,6 +7,33 @@
 
 let reloj = 0;   // ms de animación (lo avanza principal.js)
 
+// ---------- Sprites generados con IA (assets/sprites/) ----------
+// Si la imagen existe se usa; si no cargó (o falta), se dibuja el vector.
+const SPRITES_IMG = {};
+const POSES_SPRITE = ['parado', 'camina', 'ataca', 'herido'];
+function cargarSprites() {
+  if (typeof Image === 'undefined') return;
+  const ids = ['lider', 'tecnico', 'flaco', 'vecino', 'dron', 'soldado',
+               'pistolero', 'sapo', 'vendedor', 'scooter', 'policia', 'yonki'];
+  for (const id of ids) {
+    SPRITES_IMG[id] = {};
+    for (const pose of POSES_SPRITE) {
+      const img = new Image();
+      img.onload = () => { SPRITES_IMG[id][pose] = img; };
+      img.src = `assets/sprites/${id}_${pose}.png`;
+    }
+  }
+}
+cargarSprites();
+
+// pose actual de una unidad según lo que esté haciendo
+function poseDe(u) {
+  if (u.pose) return u.pose;                       // 'ataca' / 'herido' puestos por combate
+  const moviendo = Math.abs(u.gx - u.x) + Math.abs(u.gy - u.y) > 0.02;
+  if (moviendo) return Math.floor(reloj / 140) % 2 ? 'camina' : 'parado';
+  return 'parado';
+}
+
 function rombo(c, cx, cy, w = TW, h = TH) {
   c.beginPath();
   c.moveTo(cx, cy - h / 2); c.lineTo(cx + w / 2, cy);
@@ -120,8 +147,9 @@ function dibujarResaltados() {
 }
 
 // anillo naranja: celdas que alcanza el arma equipada desde la posición actual
+// (incluye el rango extendido de lanzamiento cuando hay puntería suficiente)
 function dibujarRangoArma(u) {
-  const a = armaDe(u);
+  const a = rangoAtaqueDe(u);
   for (let y = Math.max(0, u.y - a.rmax); y <= Math.min(mapa.filas - 1, u.y + a.rmax); y++)
     for (let x = Math.max(0, u.x - a.rmax); x <= Math.min(mapa.cols - 1, u.x + a.rmax); x++) {
       const d = mdist(u.x, u.y, x, y);
@@ -149,7 +177,7 @@ function dibujarAltos() {
     for (let x = 0; x < mapa.cols; x++) {
       if (!explorado(x, y)) continue;
       const ch = mapa.celdas[y][x];
-      if (ch === 'B' || ch === 'T' || ch === 'P' || ch === 'K') items.push({ d: profundidad(x, y), tipo: ch, x, y });
+      if (ch === 'B' || ch === 'T' || ch === 'P' || ch === 'K' || ch === 'E') items.push({ d: profundidad(x, y), tipo: ch, x, y });
       else if (ch === 'C') items.push({ d: profundidad(x, y), tipo: 'C', x, y });
       else if ('NSO'.includes(ch) && !mapa.bancasRotas.has(clave(x, y))) items.push({ d: profundidad(x, y), tipo: ch, x, y });
       else if (ch === 'J' && !mapa.cajasAbiertas.has(clave(x, y))) items.push({ d: profundidad(x, y), tipo: 'J', x, y });
@@ -172,6 +200,7 @@ function dibujarAltos() {
     else if (it.tipo === 'N') dibujarBanca(it.x, it.y);
     else if (it.tipo === 'S') dibujarSilla(it.x, it.y);
     else if (it.tipo === 'O') dibujarBasurero(it.x, it.y);
+    else if (it.tipo === 'E') dibujarBencinera(it.x, it.y);
     else if (it.tipo === 'J') dibujarCaja(it.x, it.y);
     else if (it.tipo === 'suelto') dibujarSuelto(it.s);
     else dibujarUnidad(it.u);
@@ -317,6 +346,32 @@ function dibujarBanca(x, y) {
   ctx.fillRect(cx - 16, cy - 22, 32, 4);
 }
 
+// bencinera de barrio: bomba de combustible (fuente de bencina para molotovs)
+function dibujarBencinera(x, y) {
+  const cx = isoX(x, y), cy = isoY(x, y);
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
+  const conCarga = (mapa.bencinaRestante || 0) > 0;
+  if (conCarga && visible(x, y)) {
+    const p = 0.5 + 0.5 * Math.sin(reloj / 300 + x);
+    ctx.fillStyle = `rgba(87,200,232,${0.08 + 0.1 * p})`;
+    ctx.beginPath(); ctx.ellipse(cx, cy, 26 + p * 3, 13 + p * 2, 0, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 13, 5.5, 0, 0, 7); ctx.fill();
+  // cuerpo de la bomba
+  ctx.fillStyle = sombrear(conCarga ? '#c04040' : '#6a5a55', oscuro);
+  rrect(cx - 8, cy - 30, 16, 30, 3);
+  ctx.fillStyle = sombrear('#e8e8e0', 0.9 * oscuro);
+  ctx.fillRect(cx - 6, cy - 26, 12, 8);          // visor
+  ctx.fillStyle = sombrear('#2a2d33', oscuro);
+  ctx.fillRect(cx - 6, cy - 14, 12, 3);
+  // manguera
+  ctx.strokeStyle = sombrear('#2a2d33', oscuro); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx + 8, cy - 24); ctx.quadraticCurveTo(cx + 16, cy - 18, cx + 13, cy - 6); ctx.stroke();
+  ctx.lineWidth = 1;
+  if (conCarga && visible(x, y)) _insignia(cx, cy - 38, '⛽', '#57c8e8');
+}
+
 // silla plástica de esquina (rompible: sirve de arma)
 function dibujarSilla(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
@@ -404,14 +459,23 @@ function dibujarUnidad(u) {
   ctx.translate(0, (u.pv > 0 ? bob : 0) + altura);
   ctx.scale(u.cara, 1);
 
-  if (u.vehiculo) dibVehiculo(u);   // skate o scooter bajo los pies
-  const S = {
-    lider: dibHumano, tecnico: dibHumano, flaco: dibHumano, vecino: dibHumano,
-    soldado: dibHumano, pistolero: dibHumano, sapo: dibHumano, vendedor: dibHumano,
-    scooter: dibHumano,
-    dron: dibDron,
-  }[u.sprite] || dibHumano;
-  S(u);
+  const img = SPRITES_IMG[u.sprite] && SPRITES_IMG[u.sprite][poseDe(u)];
+  if (img) {
+    // sprite generado con IA: anclado a los pies, mirando según u.cara
+    if (u.vehiculo === 'skate') dibVehiculo(u);   // la tabla va aparte
+    const alto = u.vuela ? 34 : 44;
+    const ancho = alto * img.width / img.height;
+    ctx.drawImage(img, -ancho / 2, -alto + 2, ancho, alto);
+  } else {
+    if (u.vehiculo) dibVehiculo(u);   // skate o scooter bajo los pies
+    const S = {
+      lider: dibHumano, tecnico: dibHumano, flaco: dibHumano, vecino: dibHumano,
+      soldado: dibHumano, pistolero: dibHumano, sapo: dibHumano, vendedor: dibHumano,
+      scooter: dibHumano, yonki: dibHumano,
+      dron: dibDron,
+    }[u.sprite] || dibHumano;
+    S(u);
+  }
 
   ctx.restore();
   ctx.filter = 'none';
