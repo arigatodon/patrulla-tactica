@@ -23,6 +23,21 @@
   canvas{
     display:block; border:1px solid var(--line); border-radius:8px; background:#101216;
     max-width:100%; height:auto; box-shadow:0 10px 40px rgba(0,0,0,.5); cursor:pointer;
+    touch-action:none;   /* el juego gestiona toque: tap juega, arrastre panea, pellizco = zoom */
+    user-select:none; -webkit-user-select:none;
+  }
+  /* celular / pantallas angostas: panel a lo ancho bajo el mapa, botones cómodos */
+  @media (max-width: 1020px){
+    body{padding:8px;}
+    #contenedor{gap:8px;}
+    #panel{width:100%; max-width:962px; order:2;}
+    #escenario{order:1;}
+    button{padding:12px; font-size:14px;}
+    #telefono{width:78%; max-width:280px;}
+    #dRetrato{width:76px; height:auto;}
+    #dialogo{padding:8px;}
+    #dContenido{padding:8px 10px; min-height:64px;}
+    #dTexto{font-size:12.5px;}
   }
   #panel{
     width:300px; background:var(--panel); border:1px solid var(--line); border-radius:8px;
@@ -51,6 +66,8 @@
   }
   .mochila{margin-top:5px; font-size:15px;}
   .itemMochila{cursor:pointer; margin-right:4px; text-decoration:none;}
+  .slotVacio{color:#3a4150; margin-right:4px;}
+  .armaEquipada{background:#20242d; border:1px solid #3a4150; border-radius:5px; padding:4px 6px; margin-top:4px; font-size:12px;}
   #pronostico{color:var(--gold);}
   #pronostico .frow{display:flex; justify-content:space-between; margin-top:2px;}
   button{
@@ -64,6 +81,10 @@
   button.alerta{background:linear-gradient(180deg,#7d3b3b,#572929); border-color:#a15050;}
   button.dorado{background:linear-gradient(180deg,#8a6a20,#5c4715); border-color:#c8a040;}
   #btnEsperar,#btnTelefono,#btnOperativo{display:none;}
+  #habilidadesCrew{display:flex; flex-direction:column; gap:6px;}
+  .habCrew{
+    background:#20242d; text-transform:none; letter-spacing:0; font-size:12px; padding:8px;
+  }
   #registro{max-height:130px; overflow-y:auto; font-size:12px; line-height:1.45; color:var(--dim);}
   #registro .imp{color:var(--gold);}
   #registro .mal{color:var(--red);}
@@ -85,6 +106,34 @@
   #pantallaFin h2.gana{color:var(--gold); text-shadow:0 0 16px rgba(240,192,64,.5);}
   #pantallaFin h2.pierde{color:var(--red); text-shadow:0 0 16px rgba(224,85,85,.5);}
   .linkPeligro{color:var(--dim); font-size:11px; text-decoration:underline; cursor:pointer; background:none; border:none; width:auto; text-transform:none; letter-spacing:0; font-weight:400; padding:2px;}
+
+  /* ---- Diálogos de enfrentamiento ---- */
+  #dialogo{
+    position:absolute; inset:0; z-index:7;
+    display:flex; align-items:flex-end; padding:14px;
+    background:linear-gradient(180deg, transparent 55%, rgba(5,7,10,.75));
+    cursor:pointer;
+  }
+  #dCaja{
+    display:flex; gap:12px; align-items:flex-end; width:100%;
+    animation:dEntra .25s ease-out;
+  }
+  @keyframes dEntra{from{transform:translateY(14px); opacity:0} to{transform:none; opacity:1}}
+  #dRetrato{
+    background:linear-gradient(180deg,#232833,#161a21);
+    border:2px solid var(--cyan); border-radius:10px;
+    box-shadow:0 0 18px rgba(57,197,224,.35);
+    flex-shrink:0;
+  }
+  #dContenido{
+    flex:1; background:rgba(16,19,25,.95); border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; min-height:86px;
+  }
+  #dNombre{font-weight:700; color:var(--cyan); letter-spacing:1px; font-size:13px; margin-bottom:5px;}
+  #dTexto{font-size:14px; line-height:1.55;}
+  #dOpciones{display:flex; gap:8px; margin-top:10px;}
+  #dOpciones button{width:auto; padding:8px 14px; font-size:12px; text-transform:none; letter-spacing:0;}
+  #dSeguir{color:var(--dim); font-size:11px; margin-top:8px; text-align:right;}
 
   /* ---- Teléfono: desliza desde el borde derecho ---- */
   #telefono{
@@ -156,6 +205,25 @@
       <button id="btnEmpezar">Salir a patrullar</button>
     </div>
 
+    <!-- Diálogos de enfrentamiento: retrato con zoom a la izquierda -->
+    <div id="dialogo" style="display:none">
+      <div id="dCaja">
+        <canvas id="dRetrato" width="120" height="140"></canvas>
+        <div id="dContenido">
+          <div id="dNombre"></div>
+          <div id="dTexto"></div>
+          <div id="dOpciones"></div>
+          <div id="dSeguir">▸ clic para continuar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pantalla" id="pantallaBrief" style="display:none">
+      <h2 id="briefTitulo" style="color:var(--gold);font-size:22px"></h2>
+      <p id="briefTexto"></p>
+      <button id="btnBrief">Salir a la calle</button>
+    </div>
+
     <div class="pantalla" id="pantallaFin">
       <h2 id="finTitulo"></h2>
       <p id="finTexto"></p>
@@ -169,6 +237,7 @@
       <div class="cajatitulo">Misión</div>
       <div id="etiquetaTurno" class="jugador">—</div>
       <div id="nombreBarrio"></div>
+      <div id="objetivoTexto" style="font-size:12px;margin-top:4px"></div>
     </div>
     <div class="caja">
       <div class="cajatitulo">Respeto del barrio · <span id="respetoNum">0</span>/100 — cartas 📇 <span id="cartasNum">0/3</span></div>
@@ -182,8 +251,10 @@
       <div class="cajatitulo">Pronóstico de combate</div>
       <div id="pronostico"></div>
     </div>
+    <button id="btnRotar">↻ Rotar cámara <span style="opacity:.6">[R]</span></button>
     <button id="btnTelefono">📱 Usar teléfono <span style="opacity:.6">[T]</span></button>
     <button id="btnEsperar" class="alerta">Esperar (no atacar)</button>
+    <div id="habilidadesCrew"></div>
     <button id="btnOperativo" class="dorado">🚨 Operativo municipal</button>
     <button id="btnFinTurno">Terminar turno <span style="opacity:.6">[E]</span></button>
     <div class="caja">
@@ -192,9 +263,11 @@
     </div>
     <div class="caja" id="ayuda">
       <div class="cajatitulo">Controles</div>
-      <kbd>Clic</kbd> seleccionar / mover / atacar · <kbd>T</kbd> teléfono<br>
+      <kbd>Clic/Tap</kbd> seleccionar / mover / atacar · <kbd>T</kbd> teléfono<br>
+      <kbd>Arrastrar</kbd> mover cámara · <kbd>Rueda/Pellizco</kbd> zoom<br>
       <kbd>Clic der.</kbd>/<kbd>Esc</kbd> cancelar · <kbd>E</kbd> fin de turno<br>
-      Banca adyacente: clic para romperla (da 🪵 palo)
+      Bancas, sillas y basureros adyacentes se rompen con clic (dan objetos)<br>
+      <button id="btnAmbiente" class="linkPeligro" style="margin-top:4px">🔈 ambiente: no</button>
     </div>
   </div>
 </div>

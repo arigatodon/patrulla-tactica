@@ -42,13 +42,36 @@ function dibujarSuelo() {
       const ch = charEn(x, y), t = TERRENOS[ch];
       const v = 0.94 + (hashCelda(x, y) % 100) / 900;
       rombo(ctx, cx, cy);
-      ctx.fillStyle = sombrear(t.color, v * (nb === 1 ? 0.45 : 1));   // explorado: penumbra
+      // lo explorado queda revelado (apenas más apagado que lo visible)
+      ctx.fillStyle = sombrear(t.color, v * (nb === 1 ? 0.8 : 1));
       ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,.28)';
       ctx.stroke();
-      if (nb === 2 && ch === '.' && (x + y) % 3 === 0) {
+      if (ch === '.' && (x + y) % 3 === 0) {
         ctx.fillStyle = 'rgba(230,220,140,.4)';
         ctx.fillRect(cx - 5, cy - 1.5, 10, 3);
+      }
+      // rasgos del sector sobre el suelo
+      if (ch === 'F') {   // líneas de la cancha
+        ctx.strokeStyle = 'rgba(240,245,240,.4)';
+        rombo(ctx, cx, cy, TW - 10, TH - 5);
+        ctx.stroke();
+      } else if (ch === 'R') {   // durmientes y rieles
+        ctx.strokeStyle = 'rgba(20,20,22,.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - TW / 4, cy - TH / 4 + 3); ctx.lineTo(cx + TW / 4, cy + TH / 4 + 3);
+        ctx.moveTo(cx - TW / 4 + 8, cy - TH / 4 - 1); ctx.lineTo(cx + TW / 4 + 8, cy + TH / 4 - 1);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(90,70,50,.5)';
+        ctx.fillRect(cx - 9, cy - 2, 18, 4);
+      } else if (ch === 'D') {   // ondas de arena
+        ctx.strokeStyle = 'rgba(120,95,55,.35)';
+        ctx.beginPath();
+        ctx.arc(cx - 8, cy + 2, 7, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.arc(cx + 10, cy + 5, 6, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
       }
       // fuego en celda visible
       if (nb === 2 && mapa.fuego.has(clave(x, y))) {
@@ -91,7 +114,25 @@ function dibujarResaltados() {
     rombo(ctx, isoX(u.x, u.y), isoY(u.x, u.y), TW - 2, TH - 1);
     ctx.strokeStyle = `rgba(57,197,224,${pulso})`;
     ctx.lineWidth = 2.5; ctx.stroke(); ctx.lineWidth = 1;
+    // rango del arma seleccionada dibujado en el suelo
+    if (!u.noAtaca && partida.estado === 'seleccion') dibujarRangoArma(u);
   }
+}
+
+// anillo naranja: celdas que alcanza el arma equipada desde la posición actual
+function dibujarRangoArma(u) {
+  const a = armaDe(u);
+  for (let y = Math.max(0, u.y - a.rmax); y <= Math.min(mapa.filas - 1, u.y + a.rmax); y++)
+    for (let x = Math.max(0, u.x - a.rmax); x <= Math.min(mapa.cols - 1, u.x + a.rmax); x++) {
+      const d = mdist(u.x, u.y, x, y);
+      if (d < a.rmin || d > a.rmax) continue;
+      if (terrenoEn(x, y).bloquea && !puntoEn(x, y)) continue;
+      rombo(ctx, isoX(x, y), isoY(x, y), TW - 26, TH - 13);
+      ctx.strokeStyle = 'rgba(255,170,70,.75)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
 }
 function marcarBlanco(e) {
   rombo(ctx, isoX(e.x, e.y), isoY(e.x, e.y), TW - 6, TH - 3);
@@ -108,24 +149,29 @@ function dibujarAltos() {
     for (let x = 0; x < mapa.cols; x++) {
       if (!explorado(x, y)) continue;
       const ch = mapa.celdas[y][x];
-      if (ch === 'B' || ch === 'T') items.push({ d: x + y, tipo: ch, x, y });
-      else if (ch === 'C') items.push({ d: x + y, tipo: 'C', x, y });
-      else if (ch === 'N' && !mapa.bancasRotas.has(clave(x, y))) items.push({ d: x + y, tipo: 'N', x, y });
-      else if (ch === 'J' && !mapa.cajasAbiertas.has(clave(x, y))) items.push({ d: x + y, tipo: 'J', x, y });
+      if (ch === 'B' || ch === 'T' || ch === 'P' || ch === 'K') items.push({ d: profundidad(x, y), tipo: ch, x, y });
+      else if (ch === 'C') items.push({ d: profundidad(x, y), tipo: 'C', x, y });
+      else if ('NSO'.includes(ch) && !mapa.bancasRotas.has(clave(x, y))) items.push({ d: profundidad(x, y), tipo: ch, x, y });
+      else if (ch === 'J' && !mapa.cajasAbiertas.has(clave(x, y))) items.push({ d: profundidad(x, y), tipo: 'J', x, y });
     }
   for (const s of sueltos)
-    if (visible(s.x, s.y)) items.push({ d: s.x + s.y, tipo: 'suelto', s });
+    if (visible(s.x, s.y)) items.push({ d: profundidad(s.x, s.y), tipo: 'suelto', s });
   for (const u of unidades) {
     if (u.pv <= 0 && u.animMuerte === undefined) continue;
-    const vis = u.equipo === 'jugador' || visible(Math.round(u.gx), Math.round(u.gy));
-    if (vis) items.push({ d: u.gx + u.gy + 0.01, tipo: 'unidad', u });
+    // los enemigos fotografiados quedan rastreados: siempre visibles en el mapa
+    const vis = u.equipo === 'jugador' || u.marcado || visible(Math.round(u.gx), Math.round(u.gy));
+    if (vis) items.push({ d: profundidad(u.gx, u.gy) + 0.01, tipo: 'unidad', u });
   }
   items.sort((a, b) => a.d - b.d);
   for (const it of items) {
     if (it.tipo === 'B') dibujarEdificio(it.x, it.y);
+    else if (it.tipo === 'P') dibujarPunto(it.x, it.y);
+    else if (it.tipo === 'K') dibujarRampa(it.x, it.y);
     else if (it.tipo === 'T') dibujarArbol(it.x, it.y);
     else if (it.tipo === 'C') dibujarCobertura(it.x, it.y);
     else if (it.tipo === 'N') dibujarBanca(it.x, it.y);
+    else if (it.tipo === 'S') dibujarSilla(it.x, it.y);
+    else if (it.tipo === 'O') dibujarBasurero(it.x, it.y);
     else if (it.tipo === 'J') dibujarCaja(it.x, it.y);
     else if (it.tipo === 'suelto') dibujarSuelto(it.s);
     else dibujarUnidad(it.u);
@@ -134,7 +180,7 @@ function dibujarAltos() {
 
 function dibujarEdificio(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
-  const oscuro = mapa.niebla[y][x] === 1 ? 0.5 : 1;
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
   const alto = 46 + (hashCelda(x, y) % 3) * 7;
   const base = ['#4a4f58', '#514b44', '#45505a'][hashCelda(x, y) % 3];
   ctx.fillStyle = sombrear(base, 0.55 * oscuro);
@@ -160,9 +206,74 @@ function dibujarEdificio(x, y) {
     }
 }
 
+// rampa de skate (Santa Elisa): cuña de hormigón
+function dibujarRampa(x, y) {
+  const cx = isoX(x, y), cy = isoY(x, y);
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
+  ctx.fillStyle = sombrear('#7a7f88', 0.7 * oscuro);
+  ctx.beginPath();
+  ctx.moveTo(cx - TW / 2 + 6, cy);
+  ctx.lineTo(cx + TW / 2 - 6, cy);
+  ctx.lineTo(cx + TW / 2 - 6, cy - 22);
+  ctx.quadraticCurveTo(cx, cy - 2, cx - TW / 2 + 6, cy);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = sombrear('#9aa0aa', oscuro);
+  ctx.fillRect(cx + TW / 2 - 10, cy - 24, 4, 24);
+  ctx.strokeStyle = 'rgba(0,0,0,.3)';
+  ctx.strokeRect(cx + TW / 2 - 10, cy - 24, 4, 24);
+}
+
+// puesto de venta: kiosco con toldo; quemado, humea
+function dibujarPunto(x, y) {
+  const cx = isoX(x, y), cy = isoY(x, y);
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
+  const p = puntoEn(x, y);
+  const quemado = p && p.quemado;
+  // aura de objetivo mientras siga en pie
+  if (!quemado && visible(x, y)) {
+    const p = 0.5 + 0.5 * Math.sin(reloj / 280);
+    ctx.fillStyle = `rgba(255,144,64,${0.10 + 0.13 * p})`;
+    ctx.beginPath(); ctx.ellipse(cx, cy, 30 + p * 4, 15 + p * 2, 0, 0, 7); ctx.fill();
+  }
+  const madera = quemado ? '#2e2a26' : '#7b5a38';
+  // mostrador
+  ctx.fillStyle = sombrear(madera, 0.7 * oscuro);
+  ctx.fillRect(cx - 16, cy - 14, 32, 14);
+  ctx.fillStyle = sombrear(madera, 1.0 * oscuro);
+  ctx.fillRect(cx - 18, cy - 17, 36, 4);
+  // postes y toldo
+  ctx.fillStyle = sombrear(quemado ? '#242220' : '#5d4433', oscuro);
+  ctx.fillRect(cx - 17, cy - 34, 3, 18); ctx.fillRect(cx + 14, cy - 34, 3, 18);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = quemado ? '#33302c'
+      : sombrear(i % 2 ? '#c8c8c0' : '#c04040', oscuro);
+    ctx.fillRect(cx - 19 + i * 7.8, cy - 38, 7.8, 5);
+  }
+  if (quemado) {
+    // llamas y humo
+    const ll = 0.6 + 0.4 * Math.sin(reloj / 90 + x);
+    ctx.fillStyle = `rgba(255,${120 + 70 * ll | 0},30,.8)`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 16, 10 + ll * 3, 14 + ll * 5, 0, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(60,60,66,.45)';
+    for (let i = 0; i < 3; i++) {
+      const h = (reloj / 14 + i * 33) % 100;
+      ctx.beginPath();
+      ctx.arc(cx + Math.sin(reloj / 400 + i * 2) * 6, cy - 34 - h * 0.5, 5 + h * 0.09, 0, 7);
+      ctx.fill();
+    }
+  } else if (visible(x, y)) {
+    // bolsitas sobre el mostrador
+    ctx.fillStyle = '#d8d8e0';
+    ctx.fillRect(cx - 8, cy - 20, 4, 3); ctx.fillRect(cx + 2, cy - 20, 4, 3);
+    _insignia(cx, cy - 46, '🎯', '#ff9040');
+  }
+}
+
 function dibujarArbol(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
-  const oscuro = mapa.niebla[y][x] === 1 ? 0.5 : 1;
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   ctx.beginPath(); ctx.ellipse(cx, cy + 2, 14, 6, 0, 0, 7); ctx.fill();
   ctx.fillStyle = sombrear('#5d4433', oscuro);
@@ -175,7 +286,7 @@ function dibujarArbol(x, y) {
 
 function dibujarCobertura(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
-  const oscuro = mapa.niebla[y][x] === 1 ? 0.5 : 1;
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
   _cubo(cx - 8, cy + 2, 9, '#8a6a42', oscuro);
   _cubo(cx + 9, cy + 4, 9, '#8a6a42', oscuro);
   _cubo(cx, cy - 6, 8, '#a07d4e', oscuro);
@@ -195,7 +306,7 @@ function _cubo(cx, cy, s, col, f = 1) {
 
 function dibujarBanca(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
-  const oscuro = mapa.niebla[y][x] === 1 ? 0.5 : 1;
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
   ctx.fillStyle = 'rgba(0,0,0,.25)';
   ctx.beginPath(); ctx.ellipse(cx, cy + 2, 16, 6, 0, 0, 7); ctx.fill();
   ctx.fillStyle = sombrear('#7b5a38', oscuro);   // patas
@@ -206,6 +317,41 @@ function dibujarBanca(x, y) {
   ctx.fillRect(cx - 16, cy - 22, 32, 4);
 }
 
+// silla plástica de esquina (rompible: sirve de arma)
+function dibujarSilla(x, y) {
+  const cx = isoX(x, y), cy = isoY(x, y);
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
+  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 10, 4.5, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = sombrear('#d8d8d0', 0.8 * oscuro);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, cy); ctx.lineTo(cx - 6, cy - 9);
+  ctx.moveTo(cx + 6, cy); ctx.lineTo(cx + 6, cy - 9);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.fillStyle = sombrear('#e8e8e0', oscuro);
+  ctx.fillRect(cx - 8, cy - 12, 16, 4);            // asiento
+  ctx.fillRect(cx - 8, cy - 24, 4, 13);            // respaldo
+}
+
+// basurero municipal (rompible: sorpresa adentro)
+function dibujarBasurero(x, y) {
+  const cx = isoX(x, y), cy = isoY(x, y);
+  const oscuro = mapa.niebla[y][x] === 1 ? 0.8 : 1;
+  ctx.fillStyle = 'rgba(0,0,0,.25)';
+  ctx.beginPath(); ctx.ellipse(cx, cy + 2, 11, 5, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = sombrear('#3f6d4a', 0.85 * oscuro);
+  ctx.beginPath();
+  ctx.moveTo(cx - 9, cy - 2); ctx.lineTo(cx - 7, cy - 22);
+  ctx.lineTo(cx + 7, cy - 22); ctx.lineTo(cx + 9, cy - 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = sombrear('#2f5238', oscuro);
+  ctx.beginPath(); ctx.ellipse(cx, cy - 22, 8, 3.4, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath(); ctx.moveTo(cx - 8, cy - 8); ctx.lineTo(cx + 8, cy - 8); ctx.stroke();
+}
+
 function dibujarCaja(x, y) {
   const cx = isoX(x, y), cy = isoY(x, y);
   if (visible(x, y)) {   // aura pulsante: aquí hay botín
@@ -213,7 +359,7 @@ function dibujarCaja(x, y) {
     ctx.fillStyle = `rgba(240,192,64,${0.10 + 0.12 * p})`;
     ctx.beginPath(); ctx.ellipse(cx, cy, 26 + p * 4, 13 + p * 2, 0, 0, 7); ctx.fill();
   }
-  _cubo(cx, cy - 2, 10, '#b08030', mapa.niebla[y][x] === 1 ? 0.5 : 1);
+  _cubo(cx, cy - 2, 10, '#b08030', mapa.niebla[y][x] === 1 ? 0.8 : 1);
   ctx.strokeStyle = 'rgba(60,40,10,.8)';
   ctx.strokeRect(cx - 4, cy - 16, 8, 8);
   ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
@@ -258,9 +404,11 @@ function dibujarUnidad(u) {
   ctx.translate(0, (u.pv > 0 ? bob : 0) + altura);
   ctx.scale(u.cara, 1);
 
+  if (u.vehiculo) dibVehiculo(u);   // skate o scooter bajo los pies
   const S = {
     lider: dibHumano, tecnico: dibHumano, flaco: dibHumano, vecino: dibHumano,
     soldado: dibHumano, pistolero: dibHumano, sapo: dibHumano, vendedor: dibHumano,
+    scooter: dibHumano,
     dron: dibDron,
   }[u.sprite] || dibHumano;
   S(u);
@@ -304,7 +452,9 @@ function dibHumano(u) {
     pistolero: { pant: '#33303c', torso: '#54408a', cab: '#b98a63', toca: 'capucha',tocaCol: '#453472', arma: true },
     sapo:      { pant: '#4a4a3a', torso: '#8a8a6a', cab: '#c9a17e', toca: 'gorra',  tocaCol: '#6a6a5a', arma: false },
     vendedor:  { pant: '#1c1c22', torso: '#25252d', cab: '#b98a63', toca: 'gorra',  tocaCol: '#c8a028', arma: true },
-  }[u.sprite];
+    scooter:   { pant: '#33303c', torso: '#6a3a2a', cab: '#b98a63', toca: 'gorra',  tocaCol: '#2a2d33', arma: true },
+    policia:   { pant: '#25301f', torso: '#2f5d3a', cab: '#c9a17e', toca: 'gorra',  tocaCol: '#1e3d26', arma: true },
+  }[u.sprite] || { pant: '#3a3a44', torso: '#5a6a7a', cab: '#b98a63', toca: 'gorra', tocaCol: '#3a3a44', arma: true };
 
   ctx.fillStyle = P.pant;
   ctx.fillRect(-6, -10, 4.5, 10); ctx.fillRect(1.5, -10, 4.5, 10);
@@ -339,6 +489,25 @@ function dibHumano(u) {
       ctx.fillRect(0, 0, u.arma.id === 'katana' ? 16 : 11, 2.2);
       ctx.restore();
     }
+  }
+}
+
+// skate o scooter eléctrico bajo la unidad
+function dibVehiculo(u) {
+  if (u.vehiculo === 'skate') {
+    ctx.fillStyle = '#c8a050';
+    rrect(-11, -2.5, 22, 3, 1.5);
+    ctx.fillStyle = '#2a2d33';
+    ctx.beginPath(); ctx.arc(-7, 1.5, 2, 0, 7); ctx.arc(7, 1.5, 2, 0, 7); ctx.fill();
+  } else {   // scooter eléctrico
+    ctx.fillStyle = '#2a2d33';
+    ctx.beginPath(); ctx.arc(-9, 0, 3, 0, 7); ctx.arc(11, 0, 3, 0, 7); ctx.fill();
+    ctx.fillStyle = '#4a5560';
+    rrect(-10, -4, 18, 3, 1.5);          // plataforma
+    ctx.strokeStyle = '#5a6570'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(10, -3); ctx.lineTo(13, -26); ctx.stroke();   // manubrio
+    ctx.beginPath(); ctx.moveTo(9, -26); ctx.lineTo(17, -26); ctx.stroke();
+    ctx.lineWidth = 1;
   }
 }
 
@@ -460,15 +629,16 @@ function dibujarBanner(dt) {
   if (b.t > b.vida) { partida.banner = null; return; }
   const p = b.t / b.vida;
   const a = p < 0.15 ? p / 0.15 : p > 0.75 ? (1 - p) / 0.25 : 1;
+  const vw = W / zoom, vh = H / zoom;   // viewport en coordenadas de mundo
   ctx.globalAlpha = a * 0.85;
   ctx.fillStyle = 'rgba(8,10,14,.85)';
-  ctx.fillRect(0, H / 2 - 34, W, 68);
+  ctx.fillRect(0, vh / 2 - 34 / zoom, vw, 68 / zoom);
   ctx.globalAlpha = a;
-  ctx.font = 'bold 30px "Segoe UI", sans-serif';
+  ctx.font = `bold ${30 / zoom}px "Segoe UI", sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillStyle = b.color;
   ctx.shadowColor = b.color; ctx.shadowBlur = 18;
-  ctx.fillText(b.texto, W / 2, H / 2 + 10);
+  ctx.fillText(b.texto, vw / 2, vh / 2 + 10 / zoom);
   ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
 }

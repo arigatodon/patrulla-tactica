@@ -7,7 +7,7 @@
 
 // ---------- Stats derivados ----------
 const pvMaxDe   = u => 12 + u.stats.VIT * 3 + (u.nivel - 1) * 2;
-const movDe     = u => Math.min(7, (u.vuela ? 5 : 3) + Math.floor(u.stats.AGI / 4));
+const movDe     = u => Math.min(9, (u.vuela ? 5 : 3) + Math.floor(u.stats.AGI / 4) + (u.vehiculo ? 2 : 0));
 const esquivaDe = u => Math.min(40, u.stats.AGI * 2 + (u.vuela ? 10 : 0));
 const criticoDe = u => Math.min(40, 5 + Math.floor(u.stats.SUE * 1.5));
 const expSiguiente = nivel => 40 + (nivel - 1) * 30;
@@ -34,9 +34,12 @@ function crearUnidad(def) {
     vuela: !!base.vuela, noAtaca: !!base.noAtaca,
     jefe: !!base.jefe, sapo: !!base.sapo,
     vision: base.vision || VISION_HUMANO,
+    vehiculo: base.vehiculo || null,   // 'skate' | 'scooter': +2 movimiento
+    armadura: def.armadura || null,    // 'casco' | 'chaleco': defensa extra
     aggro: false, actuo: false, aturdido: 0, disuadido: false,
     marcado: false,            // fotografiado: stats visibles y +daño recibido leve
-    mochila: [],               // hasta 2 objetos de reserva
+    slots: def.slots || 3,     // capacidad de carga (ampliable con puntos)
+    mochila: [],               // objetos de reserva (hasta u.slots)
     balanceo: Math.random() * Math.PI * 2,
     aggroBase: base.aggro || 0,
   };
@@ -80,13 +83,24 @@ function subirStat(u, stat) {
   guardar();
 }
 
+// gastar un punto de nivel en un slot más de mochila (máx. 6)
+function subirSlots(u) {
+  if (u.puntos <= 0 || u.slots >= 6) return;
+  u.slots++;
+  u.puntos--;
+  SFX.sel();
+  registrar(`🎒 ${u.nombre} amplía su carga a ${u.slots} espacios.`);
+  refrescarPanel();
+  guardar();
+}
+
 // ---------- Escuadrón inicial / persistido ----------
 function armarEscuadron() {
   const lista = [];
   if (cruzada.plantilla && cruzada.plantilla.length) {
     for (const p of cruzada.plantilla)
       lista.push({ equipo: 'jugador', clase: p.clase, nombre: p.nombre, nivel: p.nivel,
-                   exp: p.exp, puntos: p.puntos, stats: p.stats,
+                   exp: p.exp, puntos: p.puntos, stats: p.stats, slots: p.slots, armadura: p.armadura,
                    arma: p.arma ? instanciarArma(p.arma.id, p.arma.usos) : (CLASES[p.clase].arma ? undefined : null) });
     // el dron siempre vuelve (la junta lo vuelve a prestar)
     if (!lista.some(l => l.clase === 'dron'))
@@ -127,14 +141,35 @@ function poblarBarrio(dificultad, capitulo) {
       nombre: capitulo.jefe, x: jx, y: jy,
     }));
   }
-  const nSoldados = esMolotov ? 3 : 3 + Math.min(5, dificultad) + (esFinal ? 2 : 0);
+  const tropa = capitulo.soldados || ['soldado', 'pistolero'];
+  const nSoldados = esMolotov ? 3 : 4 + Math.min(5, dificultad) + (esFinal ? 2 : 0);
   for (let i = 0; i < nSoldados; i++) {
-    const tipo = rnd() < 0.3 ? 'pistolero' : 'soldado';
+    const tipo = tropa[Math.floor(rnd() * tropa.length)];
     const ex = rndInt(Math.floor(mapa.cols * 0.35), mapa.cols - 1);
     const ey = rndInt(0, mapa.filas - 1);
     const [fx, fy] = celdaLibreCerca(ex, ey);
     if (unidadEn(fx, fy)) continue;
     unidades.push(crearUnidad({ equipo: 'enemigo', clase: tipo, nivel, nombre: ENEMIGOS[tipo].nombre, x: fx, y: fy }));
+  }
+  // traficantes plantados en la cancha (Santa Elisa)
+  if (mapa.rasgos.cancha) {
+    const c = mapa.rasgos.cancha;
+    for (let i = 0; i < 2; i++) {
+      const [fx, fy] = celdaLibreCerca(c.x + 1 + i * 3, c.y + 1 + i);
+      if (!unidadEn(fx, fy))
+        unidades.push(crearUnidad({ equipo: 'enemigo', clase: 'soldado', nivel, nombre: 'Traficante', x: fx, y: fy }));
+    }
+  }
+  // un skate olvidado junto a las rampas del skatepark
+  if (mapa.rasgos.skatepark) {
+    const s = mapa.rasgos.skatepark;
+    soltarEnPiso(s.x, s.y, instanciarObjeto('skate'));
+  }
+  // guardias pegados a cada punto de venta (Barrio Estación)
+  for (const p of mapa.puntos) {
+    const [fx, fy] = celdaLibreCerca(p.x + 1, p.y);
+    if (!unidadEn(fx, fy) && rnd() < 0.8)
+      unidades.push(crearUnidad({ equipo: 'enemigo', clase: tropa[0], nivel, nombre: ENEMIGOS[tropa[0]].nombre, x: fx, y: fy }));
   }
   const nSapos = esMolotov ? 1 : 1 + Math.floor(dificultad / 2);
   for (let i = 0; i < nSapos; i++) {

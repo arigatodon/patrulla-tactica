@@ -8,20 +8,21 @@
 // ---------- Generación procedural ----------
 // Un barrio: rejilla de calles que separan manzanas; cada manzana se rellena
 // con edificios, parque o explanada; encima se riegan coberturas, bancas y cajas.
-function generarMapa(semillaMapa, dificultad) {
+function generarMapa(semillaMapa, dificultad, tema) {
   sembrar(semillaMapa);
   for (let intento = 0; intento < 30; intento++) {
-    const m = _generarCandidato(dificultad);
+    const m = _generarCandidato(dificultad, tema);
     if (_conectado(m)) { m.semilla = semillaMapa; return m; }
   }
   // sin suerte con la semilla: mapa plano de emergencia (siempre conectado)
-  const filas = 12, cols = 16;
+  const filas = 14, cols = 19;
   const celdas = Array.from({ length: filas }, () => Array(cols).fill('.'));
   return _armarMapa(celdas, filas, cols);
 }
 
-function _generarCandidato(dificultad) {
-  const cols = 15 + Math.min(4, dificultad), filas = 11 + Math.min(3, Math.floor(dificultad / 2));
+function _generarCandidato(dificultad, tema) {
+  // escenarios amplios estilo Commandos (el zoom automático los encuadra)
+  const cols = 18 + Math.min(5, dificultad), filas = 13 + Math.min(4, Math.floor(dificultad / 2));
   const celdas = Array.from({ length: filas }, () => Array(cols).fill('B'));
 
   // 1) calles: 2-3 verticales y 2 horizontales que cruzan todo el barrio
@@ -58,8 +59,11 @@ function _generarCandidato(dificultad) {
         if (celdas[fy][fx] === 'B') celdas[fy][fx] = 'G';
   }
 
-  // 5) detalle sobre suelo transitable: árboles en parque, bancas, coberturas y cajas
-  const cajas = rndInt(3, 4 + Math.min(2, dificultad));
+  // 5) rasgos del sector (cancha, rieles, dunas, rampas de skate)
+  const rasgos = _aplicarTema(celdas, filas, cols, tema);
+
+  // 6) detalle sobre suelo transitable: árboles en parque, bancas, coberturas y cajas
+  const cajas = rndInt(4, 5 + Math.min(3, dificultad));
   let cajasPuestas = 0;
   for (let fy = 0; fy < filas; fy++)
     for (let fx = 2; fx < cols; fx++) {
@@ -67,21 +71,63 @@ function _generarCandidato(dificultad) {
       if (c === 'G' && rnd() < 0.12) celdas[fy][fx] = 'T';
       else if (c === 'G' && rnd() < 0.10) celdas[fy][fx] = 'N';
       else if (c === ',' && rnd() < 0.05) celdas[fy][fx] = 'N';
+      else if (c === ',' && rnd() < 0.04) celdas[fy][fx] = 'S';
+      else if (c === ',' && rnd() < 0.04) celdas[fy][fx] = 'O';
       else if ((c === '.' || c === ',') && rnd() < 0.06) celdas[fy][fx] = 'C';
     }
   // cajas: en celdas transitables lejos del spawn
   let intentos = 200;
   while (cajasPuestas < cajas && intentos-- > 0) {
     const fx = rndInt(Math.floor(cols * 0.3), cols - 1), fy = rndInt(0, filas - 1);
-    if ('.,G'.includes(celdas[fy][fx])) { celdas[fy][fx] = 'J'; cajasPuestas++; }
+    if ('.,GFD'.includes(celdas[fy][fx])) { celdas[fy][fx] = 'J'; cajasPuestas++; }
   }
 
-  return _armarMapa(celdas, filas, cols);
+  return _armarMapa(celdas, filas, cols, rasgos);
 }
 
-function _armarMapa(celdas, filas, cols) {
+// Rasgos por sector: devuelve referencias útiles (cancha, skatepark, rieles)
+function _aplicarTema(celdas, filas, cols, tema) {
+  const rasgos = {};
+  if (tema === 'santaelisa') {
+    // cancha de fútbol: explanada verde 7x4 en el centro-este
+    const cx = Math.floor(cols * 0.55), cy = Math.floor(filas / 2) - 2;
+    rasgos.cancha = { x: cx, y: cy, w: 7, h: 4 };
+    for (let fy = cy; fy < Math.min(filas, cy + 4); fy++)
+      for (let fx = cx; fx < Math.min(cols, cx + 7); fx++)
+        celdas[fy][fx] = 'F';
+    // skatepark: rincón noroeste con rampas
+    const sx = 2, sy = 1;
+    rasgos.skatepark = { x: sx + 1, y: sy + 1 };
+    for (let fy = sy; fy < sy + 3; fy++)
+      for (let fx = sx; fx < sx + 4; fx++)
+        if (fy < filas && fx < cols) celdas[fy][fx] = ',';
+    celdas[sy][sx + 1] = 'K'; celdas[sy + 2][sx + 2] = 'K';
+  } else if (tema === 'estacion') {
+    // vía férrea abandonada cruzando todo el sector + andenes
+    const ry = Math.floor(filas / 2);
+    rasgos.rieles = ry;
+    for (let fx = 0; fx < cols; fx++) {
+      celdas[ry][fx] = 'R'; celdas[ry + 1][fx] = 'R';
+      if (celdas[ry - 1][fx] === 'B' && rnd() < 0.7) celdas[ry - 1][fx] = ',';
+      if (ry + 2 < filas && celdas[ry + 2][fx] === 'B' && rnd() < 0.7) celdas[ry + 2][fx] = ',';
+    }
+  } else if (tema === 'dunas') {
+    // franja de dunas al oeste (la playa) y motas de arena entre las tomas
+    for (let fy = 0; fy < filas; fy++)
+      for (let fx = 0; fx < cols; fx++) {
+        if (fx < 4 && celdas[fy][fx] === 'B' && rnd() < 0.85) celdas[fy][fx] = 'D';
+        else if (celdas[fy][fx] === 'B' && rnd() < 0.12) celdas[fy][fx] = 'D';
+        else if (celdas[fy][fx] === 'G' && rnd() < 0.5) celdas[fy][fx] = 'D';
+      }
+  }
+  return rasgos;
+}
+
+function _armarMapa(celdas, filas, cols, rasgos = {}) {
   return {
     celdas, filas, cols,
+    rasgos,
+    puntos: [],               // puntos de venta: {x, y, quemado}
     // niebla: 0 oculto · 1 explorado (recuerdo, sin unidades) · 2 visible
     niebla: Array.from({ length: filas }, () => Array(cols).fill(0)),
     cajasAbiertas: new Set(),      // claves 'x,y' de cajas ya saqueadas
@@ -90,15 +136,42 @@ function _armarMapa(celdas, filas, cols) {
   };
 }
 
+// 'N' banca, 'S' silla y 'O' basurero se pueden romper: pasan a ser acera
 const terrenoEn = (x, y) => {
   const c = mapa.celdas[y][x];
-  if (c === 'N' && mapa.bancasRotas.has(clave(x, y))) return TERRENOS[','];
+  if ('NSO'.includes(c) && mapa.bancasRotas.has(clave(x, y))) return TERRENOS[','];
   return TERRENOS[c];
 };
 const charEn = (x, y) => {
   const c = mapa.celdas[y][x];
-  return (c === 'N' && mapa.bancasRotas.has(clave(x, y))) ? ',' : c;
+  return ('NSO'.includes(c) && mapa.bancasRotas.has(clave(x, y))) ? ',' : c;
 };
+const puntoEn = (x, y) => mapa.puntos.find(p => p.x === x && p.y === y);
+const puntosVivos = () => mapa.puntos.filter(p => !p.quemado);
+
+// Colocar n puntos de venta en celdas transitables del sector
+function colocarPuntos(n, cercaDeRieles) {
+  let puestos = 0, intentos = 300;
+  while (puestos < n && intentos-- > 0) {
+    const px = rndInt(Math.floor(mapa.cols * (cercaDeRieles ? 0.25 : 0.6)), mapa.cols - 2);
+    const py = cercaDeRieles && mapa.rasgos.rieles !== undefined
+      ? Math.max(1, Math.min(mapa.filas - 2, mapa.rasgos.rieles + rndInt(-2, 3)))
+      : rndInt(1, mapa.filas - 2);
+    if (!'.,GFD'.includes(mapa.celdas[py][px])) continue;
+    if (puntoEn(px, py)) continue;
+    const libres = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) =>
+      enMapa(px + dx, py + dy) && !TERRENOS[mapa.celdas[py + dy][px + dx]].bloquea).length;
+    if (libres < 3) continue;
+    mapa.celdas[py][px] = 'P';
+    mapa.puntos.push({ x: px, y: py, quemado: false });
+    puestos++;
+  }
+  if (!puestos) {   // red de seguridad
+    const [px, py] = celdaLibreCerca(mapa.cols - 2, mapa.filas - 2);
+    mapa.celdas[py][px] = 'P';
+    mapa.puntos.push({ x: px, y: py, quemado: false });
+  }
+}
 
 // ---------- Conectividad (validación del generador) ----------
 function _conectado(m) {
@@ -218,8 +291,39 @@ function celdaLibreCerca(x, y) {
   return [x, y];
 }
 
-// ---------- Origen del render según tamaño del mapa ----------
+// ---------- Encuadre: zoom (auto × manual) + paneo con límites ----------
 function centrarCamara() {
-  OX = (mapa.filas - 1) * TW / 2 + TW / 2 + (W - (mapa.cols + mapa.filas) * TW / 2) / 2;
-  OY = Math.max(70, (H - (mapa.cols + mapa.filas) * TH / 2) / 2 + 30);
+  const rc = colsRender(), rf = filasRender();
+  const anchoIso = (rc + rf) * TW / 2 + 30;
+  const altoIso = (rc + rf) * TH / 2 + 130;
+  zoomFit = Math.min(1, (W - 10) / anchoIso, (H - 10) / altoIso);
+  zoom = Math.min(2, Math.max(0.3, zoomFit * zoomExtra));
+  const vw = W / zoom, vh = H / zoom;   // viewport en coordenadas de mundo
+  // el paneo se limita al sobrante del mapa fuera de la vista (+ holgura)
+  const sobraX = Math.max(0, anchoIso - vw) / 2 + 70;
+  const sobraY = Math.max(0, altoIso - vh) / 2 + 70;
+  panX = Math.max(-sobraX, Math.min(sobraX, panX));
+  panY = Math.max(-sobraY, Math.min(sobraY, panY));
+  OX = (rf - 1) * TW / 2 + TW / 2 + (vw - (rc + rf) * TW / 2) / 2 - panX;
+  OY = Math.max(60, (vh - (rc + rf) * TH / 2) / 2 + 40) - panY;
+}
+
+// arrastre de cámara (dx/dy en píxeles de pantalla)
+function moverCamara(dx, dy) {
+  panX += dx / zoom;
+  panY += dy / zoom;
+  centrarCamara();
+}
+
+function ajustarZoom(factor) {
+  zoomExtra = Math.max(1, Math.min(2.6, zoomExtra * factor));
+  centrarCamara();
+}
+
+function rotarCamara() {
+  rotacion = (rotacion + 1) % 4;
+  panX = 0; panY = 0;
+  centrarCamara();
+  SFX.sel();
+  refrescarPanel();
 }

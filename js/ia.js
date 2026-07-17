@@ -32,8 +32,25 @@ async function turnoEnemigo() {
 
     if (e.sapo) { await turnoSapo(e, jugadores); continue; }
 
+    // carabineros vendidos: cumplen su turno de "servicio" y se retiran
+    if (e.esPolicia && partida.ronda >= e.seVaEnRonda) {
+      registrar('🚓 Los carabineros vendidos "terminan el turno" y se retiran.');
+      e.pv = 0; e.animMuerte = 1;
+      continue;
+    }
+
     // operativo municipal activo: los no-jefes huyen hacia el borde este
-    if (partida.operativoRondas > 0 && !e.jefe) { await huir(e); continue; }
+    if (partida.operativoRondas > 0 && !e.jefe && !e.esPolicia) { await huir(e); continue; }
+
+    // el jefe encara a la patrulla la primera vez que se activa
+    if (e.jefe && e.aggro && !e.hablo) {
+      e.hablo = true;
+      const idx = (partida.barrio * 7) % FRASES_JEFE.length;
+      await dialogo([
+        { u: e, t: FRASES_JEFE[idx] },
+        { q: 'lider', t: RESPUESTAS_LIDER[partida.barrio % RESPUESTAS_LIDER.length] },
+      ]);
+    }
 
     // activación (el apagón coordinado deja a la banda medio ciega)
     if (!e.aggro) {
@@ -90,12 +107,15 @@ async function cerrarRondaEnemiga() {
   mostrarBanner(`RONDA ${partida.ronda} — TU TURNO`, '#39c5e0');
   actualizarVision();
   refrescarPanel();
+  await chequearPolicia();   // ¿apareció la unidad que llamaste?
   chequearFin();   // p. ej. escape completado justo antes de la ronda
 }
 
 // sapo: si ve a la patrulla, da la alarma (aggro en radio 6) y huye del peligro
+// (durante el apagón coordinado no hay señal: no puede alertar)
 async function turnoSapo(e, jugadores) {
   const veA = jugadores.find(p => mdist(e.x, e.y, p.x, p.y) <= e.vision);
+  if (veA && partida.apagonRondas > 0) { await huir(e); return; }
   if (veA && !e.dioAlarma) {
     e.dioAlarma = true;
     flotante(e.x, e.y, '📢 ¡ALARMA!', '#ff9040');

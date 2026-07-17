@@ -16,9 +16,10 @@ function instanciarObjeto(id) {
 const defDe = item => item.esArma ? ARMAS[item.id] : OBJETOS[item.id];
 const rarezaDe = item => RAREZAS[defDe(item).rareza];
 
-// ---------- Loot con rareza ----------
+// ---------- Loot con rareza (con ítems sorpresa del sector) ----------
 function tirarLoot() {
-  const elegido = rndPeso(LOOT_CAJA);
+  const extra = LOOT_TEMA[partida.tema] || [];
+  const elegido = rndPeso([...LOOT_CAJA, ...extra]);
   return ARMAS[elegido.item] ? instanciarArma(elegido.item) : instanciarObjeto(elegido.item);
 }
 
@@ -63,6 +64,26 @@ function anunciarLoot(u, item, prefijo) {
 // ---------- Entregar: equipar, guardar o efecto inmediato ----------
 function entregar(u, item) {
   const d = defDe(item);
+  if (d.tipo === 'vehiculo') {
+    // subirse al skate: +2 de movimiento el resto de la misión
+    if (u.vehiculo || u.vuela) { soltarEnPiso(u.x, u.y, item); return; }
+    u.vehiculo = item.id;
+    recalcular(u);
+    registrar(`🛹 <b>${u.nombre}</b> se sube al ${d.nombre.toLowerCase()}: +2 de movimiento.`, 'bien');
+    refrescarPanel();
+    return;
+  }
+  if (d.tipo === 'armadura') {
+    // ponerse casco/chaleco: defensa extra permanente (el anterior queda en el piso)
+    if (u.vuela) { soltarEnPiso(u.x, u.y, item); return; }
+    const actual = u.armadura ? OBJETOS[u.armadura] : null;
+    if (actual && actual.defensa >= d.defensa) { meterMochila(u, item); return; }
+    if (u.armadura) soltarEnPiso(u.x, u.y, instanciarObjeto(u.armadura));
+    u.armadura = item.id;
+    registrar(`${d.icono} <b>${u.nombre}</b> se pone ${d.nombre.toLowerCase()}: +${d.defensa} de defensa.`, 'bien');
+    refrescarPanel();
+    return;
+  }
   if (d.tipo === 'carta') {
     cruzada.cartas++;
     registrar(`📇 Cartas municipales: <b>${cruzada.cartas}/${CARTAS_PARA_OPERATIVO}</b> para desbloquear el Operativo.`, 'imp');
@@ -87,9 +108,9 @@ function entregar(u, item) {
 }
 
 function meterMochila(u, item) {
-  if (u.mochila.length >= 2) {
+  if (u.mochila.length >= u.slots) {
     soltarEnPiso(u.x, u.y, u.mochila.shift());   // lo más viejo al piso
-    registrar(`Mochila de ${u.nombre} llena: deja algo en el piso.`);
+    registrar(`Mochila de ${u.nombre} llena (${u.slots}): deja algo en el piso.`);
   }
   u.mochila.push(item);
 }
@@ -115,6 +136,10 @@ function equiparDeMochila(u, idx) {
   if (u.arma && u.arma.id !== 'punos' && u.arma.usos > 0) meterMochila(u, u.arma);
   u.arma = item;
   registrar(`${u.nombre} empuña ${defDe(item).icono} ${defDe(item).nombre}.`);
+  // si estaba seleccionada, recalcular blancos y mostrar el rango del arma nueva
+  if (partida.seleccion === u && partida.estado === 'seleccion' && partida.alcance)
+    partida.blancos = opcionesAtaque(u, partida.alcance);
+  SFX.sel();
   refrescarPanel();
 }
 
@@ -133,21 +158,33 @@ function gastarArma(u) {
   }
 }
 
-// ---------- Romper banca → palo (cuesta el turno) ----------
-function bancasAdyacentes(u) {
-  const lista = [];
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const nx = u.x + dx, ny = u.y + dy;
-    if (enMapa(nx, ny) && mapa.celdas[ny][nx] === 'N' && !mapa.bancasRotas.has(clave(nx, ny)))
-      lista.push([nx, ny]);
-  }
-  return lista;
+// ---------- Muebles rompibles: banca→palo, silla→arma, basurero→sorpresa ----------
+// Romper cuesta el turno del personaje.
+function esRompibleIntacto(x, y) {
+  return enMapa(x, y) && 'NSO'.includes(mapa.celdas[y][x]) && !mapa.bancasRotas.has(clave(x, y));
 }
 
-function romperBanca(u, x, y) {
+function romperMueble(u, x, y) {
+  const ch = mapa.celdas[y][x];
   mapa.bancasRotas.add(clave(x, y));
   SFX.romper();
-  flotante(x, y, '🪵 ¡Palo!', '#c8a060');
-  registrar(`${u.nombre} rompe la banca y saca un palo (pierde el turno).`);
-  entregar(u, instanciarArma('palo'));
+  if (ch === 'N') {
+    flotante(x, y, '🪵 ¡Palo!', '#c8a060');
+    registrar(`${u.nombre} rompe la banca y saca un palo (pierde el turno).`);
+    entregar(u, instanciarArma('palo'));
+  } else if (ch === 'S') {
+    flotante(x, y, '🪑 ¡Silla!', '#c8a060');
+    registrar(`${u.nombre} agarra la silla como arma (pierde el turno).`);
+    entregar(u, instanciarArma('silla'));
+  } else {   // basurero: nunca se sabe qué hay
+    const elegido = rndPeso(LOOT_BASURERO).item;
+    const item = ARMAS[elegido] ? instanciarArma(elegido) : instanciarObjeto(elegido);
+    flotante(x, y, '🗑️ a ver…', '#b8bec8');
+    registrar(`${u.nombre} vuelca el basurero (pierde el turno).`);
+    anunciarLoot(u, item, 'Entre la basura había');
+    entregar(u, item);
+  }
 }
+
+// compat: la banca clásica sigue existiendo en el guion
+function romperBanca(u, x, y) { romperMueble(u, x, y); }

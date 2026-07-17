@@ -7,11 +7,13 @@
 
 // ---------- Fórmulas ----------
 function armaDe(u) { return u.arma ? ARMAS[u.arma.id] : ARMAS.punos; }
+const armaduraDe = u => u.armadura ? OBJETOS[u.armadura].defensa : 0;
 
 function danoBase(att, def) {
   const a = armaDe(att);
   const stat = a.tipo === 'mele' ? att.stats.FUE : att.stats.DES;
-  let d = a.dano + Math.floor(stat * 0.8) - Math.floor(def.stats.VIT * 0.3) - terrenoEn(def.x, def.y).def;
+  let d = a.dano + Math.floor(stat * 0.8) - Math.floor(def.stats.VIT * 0.3)
+        - terrenoEn(def.x, def.y).def - armaduraDe(def);
   if (def.marcado) d += 1;                    // enemigo fotografiado: debilidad conocida
   return Math.max(1, d);
 }
@@ -35,7 +37,8 @@ function opcionesAtaque(u, alcance) {
   const a = armaDe(u);
   const paradas = paradasDe(u, alcance);
   for (const e of vivos(u.equipo === 'jugador' ? 'enemigo' : 'jugador')) {
-    if (u.equipo === 'jugador' && !visible(e.x, e.y)) continue;   // no atacas lo que no ves
+    // no atacas lo que no ves (los fotografiados quedan rastreados siempre)
+    if (u.equipo === 'jugador' && !visible(e.x, e.y) && !e.marcado) continue;
     const celdas = paradas.filter(key => {
       const [x, y] = desClave(key);
       const d = mdist(x, y, e.x, e.y);
@@ -103,27 +106,35 @@ async function golpe(att, def) {
   return dano;
 }
 
-// ---------- Molotov / área ----------
+// ---------- Armas de área (molotov incendia, fuegos artificiales aturden) ----------
 async function ataqueArea(att, cx, cy) {
+  const a = armaDe(att);
   SFX.tiro();
   trazadoraXY(att, cx, cy);
   gastarArma(att);
   await dormir(200);
   partida.sacudida = 10;
   explosion(cx, cy);
-  const celdasFuego = [[cx, cy], [cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-  // ¿el punto de venta quedó dentro de la llamarada?
-  if (mapa.punto && !mapa.punto.quemado)
-    for (const [fx, fy] of celdasFuego)
-      if (fx === mapa.punto.x && fy === mapa.punto.y) prenderPunto(att);
-  for (const [fx, fy] of celdasFuego) {
+  const celdasArea = [[cx, cy], [cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+  // ¿algún punto de venta quedó dentro de la llamarada?
+  if (a.incendia)
+    for (const [fx, fy] of celdasArea) {
+      const p = puntoEn(fx, fy);
+      if (p && !p.quemado) prenderPunto(att, p);
+    }
+  for (const [fx, fy] of celdasArea) {
     if (!enMapa(fx, fy) || terrenoEn(fx, fy).bloquea) continue;
-    mapa.fuego.set(clave(fx, fy), 2);          // arde 2 rondas
+    if (a.incendia) mapa.fuego.set(clave(fx, fy), 2);          // arde 2 rondas
     const v = unidadEn(fx, fy);
     if (v) {
-      const dano = Math.max(1, 7 + Math.floor(att.stats.DES * 0.5) - Math.floor(v.stats.VIT * 0.3));
+      const dano = Math.max(1, a.dano + Math.floor(att.stats.DES * 0.5)
+        - Math.floor(v.stats.VIT * 0.3) - armaduraDe(v));
       v.pv = Math.max(0, v.pv - dano);
-      flotante(v.x, v.y, '-' + dano + ' 🔥', '#ff9040');
+      flotante(v.x, v.y, '-' + dano + (a.incendia ? ' 🔥' : ' 🎆'), '#ff9040');
+      if (a.aturde && v.pv > 0) {
+        v.aturdido = Math.max(v.aturdido, a.aturde);
+        flotante(v.x, v.y, '💫 aturdido', '#57c8e8');
+      }
       if (v.equipo === 'enemigo')
         for (const al of vivos('enemigo')) if (mdist(al.x, al.y, v.x, v.y) <= 4) al.aggro = true;
       if (v.pv <= 0) await morir(v, att);
@@ -132,15 +143,20 @@ async function ataqueArea(att, cx, cy) {
   await dormir(250);
 }
 
-// ---------- Punto de venta (misión molotov) ----------
-function prenderPunto(autor) {
-  if (!mapa.punto || mapa.punto.quemado) return;
-  mapa.punto.quemado = true;
+// ---------- Puntos de venta (misiones molotov / puntos) ----------
+function prenderPunto(autor, p) {
+  if (!p || p.quemado) return;
+  p.quemado = true;
   partida.sacudida = 10;
   SFX.raro();
-  explosion(mapa.punto.x, mapa.punto.y);
-  flotante(mapa.punto.x, mapa.punto.y, '🔥 ¡EL PUNTO ARDE!', '#ff9040');
-  registrar('🔥 <b>El punto de venta arde.</b> Ahora todos de vuelta al borde oeste, ¡rápido!', 'imp');
+  explosion(p.x, p.y);
+  flotante(p.x, p.y, '🔥 ¡EL PUNTO ARDE!', '#ff9040');
+  const quedan = puntosVivos().length;
+  registrar(quedan
+    ? `🔥 <b>Punto de venta quemado.</b> Quedan <b>${quedan}</b> en el sector.`
+    : (partida.tipoMision === 'molotov'
+        ? '🔥 <b>El punto arde.</b> Ahora todos de vuelta al borde oeste, ¡rápido!'
+        : '🔥 <b>¡Todos los puntos quemados!</b> El negocio de la banda se acabó.'), 'imp');
   partida.hazanas.push('punto');
   // la banda entera se entera
   for (const e of vivos('enemigo')) e.aggro = true;
@@ -150,8 +166,8 @@ function prenderPunto(autor) {
 }
 
 // prender de cerca, sin molotov (consume la acción; despierta a la banda)
-function prenderDeCerca(u) {
-  prenderPunto(u);
+function prenderDeCerca(u, p) {
+  prenderPunto(u, p);
 }
 
 // daño de fuego al terminar la ronda sobre una celda ardiendo
@@ -195,6 +211,9 @@ async function morir(u, autor) {
     if (u.sapo) {
       registrar(`⚠️ Cayó un sapo. Era un vecino: el barrio no lo ve bien.`, 'mal');
       cambiarRespeto(-6, 'El barrio repudia la violencia contra un vecino, aunque fuera sapo');
+    } else if (u.esPolicia) {
+      registrar('🚓 Cayó un carabinero (vendido, pero uniformado). Esto trae cola.', 'mal');
+      cambiarRespeto(-4, 'pegarle a un uniformado asusta al barrio');
     } else {
       registrar(`💀 ${u.nombre} de la banda queda fuera.`, 'bien');
       partida.hazanas.push(u.jefe ? 'jefe' : 'soldado');

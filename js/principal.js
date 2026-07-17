@@ -39,8 +39,10 @@ async function moverJugador(u, destinoClave) {
   // caja debajo / loot en el piso
   if (charEn(u.x, u.y) === 'J' && !mapa.cajasAbiertas.has(clave(u.x, u.y))) abrirCaja(u, u.x, u.y);
   recogerSuelto(u);
+  chequearFin();   // p. ej. escape del prólogo completado con este movimiento
+  if (partida.terminada) { partida.ocupado = false; return; }
   // ¿quedan blancos desde aquí sin volver a mover?
-  const post = vivos('enemigo').filter(e => visible(e.x, e.y) && enRangoAtaque(u, e.x, e.y));
+  const post = vivos('enemigo').filter(e => (visible(e.x, e.y) || e.marcado) && enRangoAtaque(u, e.x, e.y));
   partida.ocupado = false;
   if (post.length) {
     partida.estado = 'objetivo';
@@ -86,28 +88,45 @@ function terminarTurnoJugador() {
 // ---------- Fin de misión ----------
 function chequearFin() {
   if (partida.terminada) return;
-  const jefes = vivos('enemigo').filter(e => e.jefe);
-  if (!jefes.length) return finMision(true);
   if (!vivos('jugador').filter(u => !u.vuela).length) return finMision(false);   // el dron solo no pelea
+  if (partida.tipoMision === 'molotov') {
+    // prólogo: punto quemado + toda la patrulla de vuelta en el borde oeste
+    if (mapa.puntos.length && !puntosVivos().length && vivos('jugador').every(u => u.x <= 1))
+      return finMision(true);
+  } else if (partida.tipoMision === 'puntos') {
+    // Barrio Estación: quemar todos los puntos de venta
+    if (mapa.puntos.length && !puntosVivos().length) return finMision(true);
+  } else {
+    const jefes = vivos('enemigo').filter(e => e.jefe);
+    if (!jefes.length) return finMision(true);
+  }
 }
 
 function finMision(gano) {
   partida.terminada = true; partida.ocupado = true;
   const pantalla = $('pantallaFin'), titulo = $('finTitulo');
   if (gano) {
-    titulo.textContent = `✔ ${partida.nombreBarrio} es libre`;
+    titulo.textContent = partida.tipoMision === 'molotov'
+      ? '✔ El punto ardió y nadie los vio venir'
+      : `✔ ${partida.nombreBarrio} es libre`;
     titulo.className = 'gana';
-    // recompensas de escenario: respeto + posible carta extra si el barrio es alto
+    // recompensas de escenario: carta posible + habilidad de crew por rareza
     let extra = '';
     if (rnd() < 0.25 + partida.barrio * 0.05) {
       cruzada.cartas++;
-      extra = ' Un vecino agradecido entrega una <b style="color:#f0c040">carta municipal</b>.';
+      extra = ' Un vecino agradecido entrega una <b style="color:#f0c040">carta municipal</b> 📇.';
     }
-    $('finTexto').innerHTML =
-      `La banda quedó fuera en ${partida.ronda} rondas. Los vecinos salen a la calle y la app se llena de puntos verdes.${extra}`;
+    const hab = recompensaEscenario();
+    if (hab) {
+      const h = HABILIDADES_CREW[hab], rz = RAREZAS[h.rareza];
+      extra += ` La cruzada aprende algo nuevo: ${h.icono} <b style="color:${rz.color}">${h.nombre}</b> <small>(${rz.nombre})</small> — ${h.desc}`;
+    }
+    $('finTexto').innerHTML = (partida.tipoMision === 'molotov'
+      ? `La primera chispa. Mañana otra patrulla lanzará la suya en otro barrio — y la junta de Crespo ya ofreció prestar su dron.`
+      : `La banda quedó fuera en ${partida.ronda} rondas. Los vecinos salen a la calle y la app se llena de puntos verdes.`) + extra;
     cruzada.barrio = partida.barrio + 1;
     cruzada.operativoUsado = false;   // el favor municipal se renueva por barrio
-    $('btnSiguiente').textContent = `Siguiente barrio: ${BARRIOS[Math.min(cruzada.barrio - 1, BARRIOS.length - 1)].nombre} →`;
+    $('btnSiguiente').textContent = `${capituloDe(cruzada.barrio).titulo} →`;
     SFX.gana();
   } else {
     titulo.textContent = '✖ La patrulla se repliega';
@@ -125,28 +144,53 @@ function finMision(gano) {
 // ---------- Iniciar misión ----------
 function iniciarMision(semillaOpcional) {
   const nBarrio = cruzada.barrio;
-  const info = BARRIOS[Math.min(nBarrio - 1, BARRIOS.length - 1)];
+  const cap = capituloDe(nBarrio);
   const semilla = semillaOpcional !== undefined ? semillaOpcional : Math.floor(Math.random() * 2 ** 31);
 
-  mapa = generarMapa(semilla, nBarrio);
+  mapa = generarMapa(semilla, nBarrio, cap.tema);
+  rotacion = 0; panX = 0; panY = 0; zoomExtra = 1;
   centrarCamara();
-  poblarBarrio(nBarrio);
+
+  // puntos de venta según el tipo de misión (antes de poblar: llevan guardias)
+  if (cap.tipo === 'molotov') colocarPuntos(1, false);
+  else if (cap.tipo === 'puntos') colocarPuntos(3, cap.tema === 'estacion');
+
+  poblarBarrio(nBarrio, cap);
+
+  // usos de habilidades de crew por misión
+  const usos = {};
+  for (const id of cruzada.habilidades) usos[id] = 1;
 
   efectos = []; tweens = []; lineasRegistro = []; feed = [];
   Object.assign(partida, {
-    barrio: nBarrio, nombreBarrio: info.nombre, banda: info.banda,
+    barrio: nBarrio, nombreBarrio: cap.nombre, banda: cap.banda, tipoMision: cap.tipo, tema: cap.tema,
     ronda: 1, fase: 'jugador', estado: 'idle',
     seleccion: null, alcance: null, blancos: null, postBlancos: null,
     hover: null, hoverUnidad: null, ocupado: false, terminada: false,
     banner: null, sacudida: 0, operativoRondas: 0, fotosEsteTurno: 0, hazanas: [],
+    apagonRondas: 0, murgaRondas: 0, usosHabilidad: usos,
+    policia: null, policiaLlamada: false,
   });
   actualizarVision();
 
-  registrar(`📍 <b>${info.nombre}</b> — banda: <b>${info.banda}</b>. La patrulla entra por el oeste.`, 'imp');
-  registrar('Usa a "La Garza" (dron) para revelar el barrio y fotografiar soldados y sapos.');
-  mostrarBanner(`${info.nombre.toUpperCase()} — RONDA 1`, '#39c5e0');
+  registrar(`📍 <b>${cap.nombre}</b> — banda: <b>${cap.banda}</b>. La patrulla entra por el oeste.`, 'imp');
+  registrar(cap.tipo === 'molotov'
+    ? '🔥 Quema el punto de venta y vuelve con todos al borde oeste.'
+    : cap.tipo === 'puntos'
+      ? `🔥 Quema los <b>${mapa.puntos.length} puntos de venta</b> de ${cap.banda}.`
+      : 'Usa a "La Garza" (dron) para revelar el sector y fotografiar soldados y sapos.');
+  mostrarBanner(`${cap.nombre.toUpperCase()} — RONDA 1`, '#39c5e0');
   guardar();
   refrescarPanel();
+  if (cap.dialogo) dialogo(cap.dialogo);   // conversación de apertura del sector
+}
+
+// briefing del capítulo antes de arrancar
+function mostrarBriefing() {
+  const cap = capituloDe(cruzada.barrio);
+  $('briefTitulo').textContent = cap.titulo;
+  $('briefTexto').innerHTML = cap.brief;
+  $('pantallaBrief').style.display = 'flex';
 }
 
 // ---------- Bucle principal ----------
@@ -168,6 +212,7 @@ function cuadro(t) {
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
+  ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);   // encuadre de mapas grandes
   if (partida.sacudida > 0.2)
     ctx.translate((Math.random() - 0.5) * partida.sacudida, (Math.random() - 0.5) * partida.sacudida);
 
@@ -188,11 +233,19 @@ function arrancar() {
   $('btnEmpezar').addEventListener('click', () => {
     activarAudio();
     $('pantallaIntro').style.display = 'none';
+    mostrarBriefing();
+  });
+  $('btnBrief').addEventListener('click', () => {
+    activarAudio();
+    $('pantallaBrief').style.display = 'none';
     iniciarMision();
   });
   $('btnSiguiente').addEventListener('click', () => {
     $('pantallaFin').style.display = 'none';
-    iniciarMision();
+    mostrarBriefing();
+  });
+  $('btnAmbiente').addEventListener('click', () => {
+    $('btnAmbiente').textContent = alternarAmbiente() ? '🔊 ambiente: sí' : '🔈 ambiente: no';
   });
   $('btnReiniciarTodo').addEventListener('click', () => {
     if (!confirm('¿Borrar todo el progreso de la cruzada?')) return;

@@ -17,6 +17,12 @@ const TERRENOS = {
   'N': { nombre: 'Banca',     costo: 0, def: 0, bloquea: true,  color: '#5d626c', rompible: true },
   'J': { nombre: 'Caja',      costo: 1, def: 1, bloquea: false, color: '#5d626c', caja: true },
   'P': { nombre: 'Punto de venta', costo: 0, def: 0, bloquea: true, color: '#4a3a3a' },
+  'F': { nombre: 'Cancha',    costo: 1, def: 0, bloquea: false, color: '#4a7d42' },
+  'R': { nombre: 'Vía férrea',costo: 1, def: 0, bloquea: false, color: '#43423c' },
+  'D': { nombre: 'Duna',      costo: 2, def: 1, bloquea: false, color: '#c0a468' },
+  'K': { nombre: 'Rampa de skate', costo: 0, def: 0, bloquea: true, color: '#8a8f98' },
+  'S': { nombre: 'Silla',     costo: 0, def: 0, bloquea: true,  color: '#5d626c', rompible: true },
+  'O': { nombre: 'Basurero',  costo: 0, def: 0, bloquea: true,  color: '#5d626c', rompible: true },
 };
 
 // ---------- Rarezas (aura de color) ----------
@@ -44,23 +50,47 @@ const ARMAS = {
   pistola:  { nombre: 'Pistola',  icono: '🔫', tipo: 'distancia', dano: 8, rmin: 2, rmax: 4, usos: 6, rareza: 'rara' },
   molotov:  { nombre: 'Molotov',  icono: '🔥', tipo: 'area', dano: 7, rmin: 2, rmax: 3, usos: 2, rareza: 'rara', incendia: true },
   katana:   { nombre: 'Katana',   icono: '⚔️', tipo: 'mele', dano: 11, rmin: 1, rmax: 1, usos: 12, rareza: 'legendaria' },
+  ametralleta: { nombre: 'Ametralleta', icono: '💥', tipo: 'distancia', dano: 9, rmin: 1, rmax: 3, usos: 10, rareza: 'legendaria' },
+  fierro:   { nombre: 'Fierro',   icono: '🔩', tipo: 'mele', dano: 5,  rmin: 1, rmax: 1, usos: 12, rareza: 'comun' },
+  bate:     { nombre: 'Bate',     icono: '🏏', tipo: 'mele', dano: 7,  rmin: 1, rmax: 1, usos: 8,  rareza: 'pococomun' },
+  honda:    { nombre: 'Honda',    icono: '🪃', tipo: 'distancia', dano: 4, rmin: 2, rmax: 4, usos: 7, rareza: 'pococomun' },
+  fuegos:   { nombre: 'Fuegos artificiales', icono: '🎆', tipo: 'area', dano: 5, rmin: 2, rmax: 4, usos: 1, rareza: 'rara', aturde: 1 },
 };
 
 // Otros objetos que caen en cajas o de enemigos
 const OBJETOS = {
   botiquin: { nombre: 'Botiquín', icono: '💊', tipo: 'cura', cura: 8, rareza: 'pococomun' },
   vendas:   { nombre: 'Vendas',   icono: '🩹', tipo: 'cura', cura: 4, rareza: 'comun' },
+  empanada: { nombre: 'Empanada', icono: '🥟', tipo: 'cura', cura: 5, rareza: 'comun' },
+  bebida:   { nombre: 'Bebida energética', icono: '🥤', tipo: 'cura', cura: 3, rareza: 'comun' },
+  casco:    { nombre: 'Casco',    icono: '⛑️', tipo: 'armadura', defensa: 1, rareza: 'pococomun' },
+  chaleco:  { nombre: 'Chaleco',  icono: '🦺', tipo: 'armadura', defensa: 2, rareza: 'rara' },
   carta:    { nombre: 'Carta municipal', icono: '📇', tipo: 'carta', rareza: 'legendaria' },
+  skate:    { nombre: 'Skate',    icono: '🛹', tipo: 'vehiculo', movExtra: 2, rareza: 'rara' },
 };
 
 // Loot de cajas: qué puede salir y con qué peso (la rareza del arma manda su aura)
 const LOOT_CAJA = [
-  { peso: 16, item: 'palo' },  { peso: 10, item: 'botella' }, { peso: 12, item: 'piedras' },
-  { peso: 10, item: 'cuchilla' }, { peso: 8, item: 'manopla' }, { peso: 7, item: 'taser' },
+  { peso: 13, item: 'palo' },  { peso: 9, item: 'botella' }, { peso: 10, item: 'piedras' },
+  { peso: 9, item: 'cuchilla' }, { peso: 7, item: 'manopla' }, { peso: 6, item: 'taser' },
+  { peso: 8, item: 'fierro' }, { peso: 6, item: 'bate' }, { peso: 5, item: 'honda' },
   { peso: 5, item: 'arco' }, { peso: 5, item: 'pistola' }, { peso: 4, item: 'molotov' },
-  { peso: 1.5, item: 'katana' },
-  { peso: 12, item: 'vendas' }, { peso: 7, item: 'botiquin' }, { peso: 2.5, item: 'carta' },
+  { peso: 3, item: 'fuegos' }, { peso: 1.5, item: 'katana' },
+  { peso: 9, item: 'vendas' }, { peso: 7, item: 'empanada' }, { peso: 6, item: 'bebida' },
+  { peso: 6, item: 'botiquin' }, { peso: 4, item: 'casco' }, { peso: 2, item: 'chaleco' },
+  { peso: 2.5, item: 'carta' },
 ];
+// lo que puede aparecer al volcar un basurero
+const LOOT_BASURERO = [
+  { peso: 30, item: 'botella' }, { peso: 22, item: 'piedras' }, { peso: 16, item: 'palo' },
+  { peso: 12, item: 'fierro' }, { peso: 12, item: 'empanada' }, { peso: 8, item: 'vendas' },
+];
+// ítems sorpresa extra según el sector
+const LOOT_TEMA = {
+  santaelisa: [{ peso: 14, item: 'skate' }],                       // los skates del skatepark
+  estacion:   [{ peso: 4, item: 'ametralleta' }],                  // el fierro de Los Cholas
+  dunas:      [{ peso: 8, item: 'skate' }, { peso: 6, item: 'botella' }],
+};
 
 // ---------- Clases del jugador ----------
 // stats: FUE fuerza · AGI agilidad · VIT vitalidad · DES destreza · SUE suerte
@@ -92,56 +122,107 @@ const ENEMIGOS = {
   pistolero: { nombre: 'Pistolero', sprite: 'pistolero', stats: { FUE: 3, AGI: 3, VIT: 4, DES: 6, SUE: 3 }, arma: 'pistola', aggro: 7 },
   sapo:      { nombre: 'Sapo',      sprite: 'sapo', stats: { FUE: 2, AGI: 6, VIT: 3, DES: 2, SUE: 4 }, arma: null, aggro: 0, sapo: true, vision: 4 },
   vendedor:  { nombre: 'Vendedor',  sprite: 'vendedor', stats: { FUE: 6, AGI: 4, VIT: 8, DES: 5, SUE: 5 }, arma: 'pistola', aggro: 3, jefe: true },
+  cholo:     { nombre: 'Cholo',     sprite: 'soldado', stats: { FUE: 4, AGI: 3, VIT: 6, DES: 5, SUE: 3 }, arma: 'ametralleta', aggro: 6 },
+  scooter:   { nombre: 'Soldado en scooter', sprite: 'scooter', stats: { FUE: 4, AGI: 7, VIT: 4, DES: 4, SUE: 3 }, arma: 'cuchilla', aggro: 8, vehiculo: 'scooter' },
+  policia:   { nombre: 'Carabinero', sprite: 'policia', stats: { FUE: 4, AGI: 4, VIT: 6, DES: 6, SUE: 3 }, arma: 'pistola', aggro: 99 },
 };
 
-// ---------- Campaña: capítulos del GUION.md ----------
+// ---------- Llamada a la policía ----------
+const PROB_POLICIA_VIENE = 0.30;   // 30%: puede que ni aparezcan
+const PROB_POLICIA_VENDIDA = 0.35; // si vienen: ¿están vendidos a la banda del sector?
+const DEMORA_POLICIA_MAX = 5;      // llegan entre 1 y 5 rondas después
+const COIMA_POLICIA = 10;          // respeto que piden para "ayudar al barrio"
+const RONDAS_POLICIA = 3;          // rondas que se quedan los vendidos
+
+// ---------- Diálogos ----------
+const FRASES_JEFE = [
+  '"¿Y ustedes qué se creen? ¿Héroes? Esta esquina come gente como ustedes."',
+  '"Díganle a la junta que esto tiene dueño. Última advertencia."',
+  '"¿La patrullita del barrio? Ja. A ver cuánto les dura el show."',
+];
+const RESPUESTAS_LIDER = [
+  '"El barrio no es tuyo. Era de nosotros antes y va a serlo después."',
+  '"No venimos a conversar. Venimos a que te vayas."',
+];
+const FRASE_SAPO_EXPUESTO = '"¡Yo no sé nada! ¡Bórrenme de la app, por favor!"';
+const DIALOGO_POLICIA_VENDIDA = [
+  { q: 'policia', n: 'Carabinero', t: '"Recibimos un llamado por desórdenes… pero ya nos atendieron <b>los otros</b>, ¿me entiende? Los alterados son ustedes."' },
+  { q: 'lider', t: '"…Llegaron vendidos. ¡Cúbranse!"' },
+];
+const DIALOGO_POLICIA_COIMA = { q: 'policia', n: 'Carabinero',
+  t: '"Podríamos hacer una pasada por el sector, espantar a esa gente… pero la bencina está cara y el papeleo es largo, ¿me entiende usted?"' };
+
+// ---------- Campaña: los sectores de Cartagena ----------
 // tipo: 'molotov' (quemar el punto y escapar) · 'jefe' (eliminar al vendedor)
-//       'final' (jefe élite con más banda)
-// La misión N usa CAPITULOS[N-1]; después del final, barrios procedurales.
+//       'puntos' (quemar todos los puntos de venta) · 'final' (jefe élite)
+// tema del mapa: 'urbano' | 'santaelisa' | 'estacion' | 'dunas'
+// soldados: tipos de tropa que puebla el sector.
 const CAPITULOS = [
-  { tipo: 'molotov', nombre: 'San Diego', banda: 'Los del Punto', jefe: null, sinDron: true,
+  { tipo: 'molotov', nombre: 'Playa Chica', banda: 'Los del Punto', jefe: null, tema: 'urbano',
+    soldados: ['soldado', 'pistolero'],
     titulo: 'Prólogo · "Una molotov cada noche"',
     brief: 'Nadie recuerda quién fue el primero. Esta noche te toca a ti: <b>quema el punto de venta</b> ' +
       '(lanza la 🔥 molotov, o préndele fuego de cerca) y <b>vuelve con todos al borde oeste</b>. ' +
-      'Mientras los soldados vigilan este barrio tranquilo, los demás barrios se organizan. Evita que te vean.' },
-  { tipo: 'jefe', nombre: 'La Boquilla', banda: 'Los del Muelle', jefe: '"El Mello"',
-    titulo: 'Capítulo 1 · "El préstamo"',
-    brief: 'La junta de Crespo prestó un dron: <b>"La Garza"</b>. El plan de Doña Ruth: revelar el barrio, ' +
-      '<b>identificar a los soldados uno por uno</b> (📸 foto) y sacarlos. Elimina al vendedor <b>"El Mello"</b>.' },
-  { tipo: 'jefe', nombre: 'Olaya Herrera', banda: 'Los Cobradores', jefe: '"Care Piña"',
-    titulo: 'Capítulo 2 · "Lo que haya a mano"',
-    brief: 'Aquí no hay arsenal: hay palos, botellas y bancas que romper. Las patrullas de otros barrios ' +
-      'dejaron 📦 <b>cajas escondidas</b> — písalas y mira qué aura sale. Elimina a <b>"Care Piña"</b>.' },
-  { tipo: 'jefe', nombre: 'Bazurto', banda: 'Los del Mercado', jefe: '"El Enfermo"',
-    titulo: 'Capítulo 3 · "Respeto"',
-    brief: 'Todo lo que hagas, publícalo 📱: el <b>respeto</b> trae vecinos a la cruzada (🤝 convocar). ' +
-      'Pero cuidado con el backlash. Elimina a <b>"El Enfermo"</b> en el mercado.' },
-  { tipo: 'jefe', nombre: 'El Pozón', banda: 'La Oficina', jefe: '"Don Waldo"',
-    titulo: 'Capítulo 4 · "Papeles de la Alcaldía"',
-    brief: 'Un funcionario arrepentido filtra 📇 <b>cartas municipales</b>. Con 3, podrás jugar sucio una vez: ' +
-      '🚨 llamar a la patrulla municipal para dispersar soldados. Elimina a <b>"Don Waldo"</b>.' },
-  { tipo: 'jefe', nombre: 'Nelson Mandela', banda: 'Los Invisibles', jefe: '"La Sombra"',
-    titulo: 'Capítulo 5 · "Uno por uno"',
-    brief: 'La cruzada ya es un método: dron arriba, identificar, aislar, sacar. Cada noche un sector nuevo. ' +
-      'Elimina a <b>"La Sombra"</b>.' },
-  { tipo: 'final', nombre: 'Getsemaní', banda: 'La Flota del Almirante', jefe: '"El Almirante"',
-    titulo: 'Capítulo 6 · "El que manda"',
-    brief: 'Las bandas eran franquicias: el proveedor mueve todo desde el puerto. Va con su mejor gente. ' +
-      'Elimina a <b>"El Almirante"</b> y Cartagena respira.' },
+      'Mientras los soldados vigilan este sector tranquilo, el resto de la comuna se organiza. Evita que te vean.',
+    dialogo: [
+      { q: 'lider', t: '"Una molotov. Todas las noches, una. Que crean que este sector está embrujado."' },
+      { q: 'pescador', t: '"Y apenas prenda, todos de vuelta a la costanera. Nadie se queda a mirar el fuego."' },
+    ] },
+  { tipo: 'jefe', nombre: 'Santa Elisa', banda: 'Los de la Cancha', jefe: '"El Rucio"', tema: 'santaelisa',
+    soldados: ['soldado', 'pistolero'],
+    titulo: 'Capítulo 1 · "La cancha no se toca"',
+    brief: 'Santa Elisa tiene skatepark y cancha de fútbol — y en la cancha se instalaron los traficantes. ' +
+      'La junta prestó el dron <b>"La Garza"</b>: revela el sector, 📸 identifica y saca a <b>"El Rucio"</b>. ' +
+      'Ojo con las cajas: por aquí ruedan 🛹 <b>skates</b> que dan +2 de movimiento.',
+    dialogo: [
+      { q: 'tecnico', t: '"La Garza está en el aire. Skatepark despejado… los traficantes están instalados en la cancha."' },
+      { q: 'lider', t: '"En MI cancha. Vamos uno por uno, con foto primero. Y ojo con las cajas: por ahí dejaron skates."' },
+    ] },
+  { tipo: 'puntos', nombre: 'Barrio Estación', banda: 'Los Cholas', jefe: '"La Chola Mayor"', tema: 'estacion',
+    soldados: ['cholo', 'soldado', 'pistolero'],
+    titulo: 'Capítulo 2 · "La estación abandonada"',
+    brief: 'La antigua estación de trenes es hoy un páramo tomado: la familia de <b>Los Cholas</b> montó ' +
+      '<b>varios puntos de venta</b> entre los rieles. Van armados hasta con 💥 <b>ametralleta</b>. ' +
+      '<b>Quema todos los puntos</b> para cortarles el negocio.',
+    dialogo: [
+      { q: 'pescador', t: '"La estación vieja… mi abuelo tomaba el tren aquí. Ahora Los Cholas venden entre los rieles."' },
+      { q: 'lider', t: '"Tres puntos, tres fuegos. Y cuidado: esa familia carga ametralleta."' },
+    ] },
+  { tipo: 'jefe', nombre: 'El Arellano', banda: 'Los de las Dunas', jefe: '"El Motorizado"', tema: 'dunas',
+    soldados: ['scooter', 'soldado', 'pistolero'],
+    titulo: 'Capítulo 3 · "Dunas y scooters"',
+    brief: 'Entre la playa grande y las dunas, la banda patrulla en 🛴 <b>scooters eléctricos</b>: ' +
+      'se mueven el doble. La arena cansa (cuesta más avanzar), úsala a tu favor. Elimina a <b>"El Motorizado"</b>.',
+    dialogo: [
+      { q: 'tecnico', t: '"Detecto scooters eléctricos patrullando las dunas. Se mueven el doble que nosotros."' },
+      { q: 'lider', t: '"La arena los frena igual que a todos. Emboscada en las dunas y se acabó el motorizado."' },
+    ] },
+  { tipo: 'final', nombre: 'Las Tomas de La Punta', banda: 'Todas las banderas', jefe: '"El Patrón de La Punta"', tema: 'dunas',
+    soldados: ['cholo', 'scooter', 'soldado', 'pistolero'],
+    titulo: 'Capítulo 4 · "La Punta"',
+    brief: 'Las tomas de terreno en La Punta han sido refugio de <b>todas las bandas</b> que fueron llegando ' +
+      'a la comuna. Ahí se atrincheró lo que queda de todas. Elimina a <b>"El Patrón"</b> y la comuna respira.',
+    dialogo: [
+      { q: 'lider', t: '"Aquí terminaron juntándose todas las banderas que fuimos sacando. La Punta es lo último."' },
+      { q: 'pescador', t: '"Después de esta noche, la comuna duerme tranquila. Vamos."' },
+    ] },
 ];
-// tras el final: rotación procedural
+// tras el final: rotación procedural por sectores de la comuna
 const BARRIOS_EXTRA = [
-  { nombre: 'Torices', banda: 'Los Rezagados' }, { nombre: 'El Campestre', banda: 'La Recaída' },
-  { nombre: 'Blas de Lezo', banda: 'Los Nuevos' }, { nombre: 'La María', banda: 'Los Últimos' },
+  { nombre: 'Playa Grande', banda: 'Los Rezagados', tema: 'dunas' },
+  { nombre: 'San Sebastián', banda: 'La Recaída', tema: 'urbano' },
+  { nombre: 'Las Terrazas', banda: 'Los Nuevos', tema: 'urbano' },
+  { nombre: 'El Estadio', banda: 'Los Últimos', tema: 'santaelisa' },
 ];
 
 function capituloDe(n) {
   if (n <= CAPITULOS.length) return CAPITULOS[n - 1];
   const extra = BARRIOS_EXTRA[(n - CAPITULOS.length - 1) % BARRIOS_EXTRA.length];
   return {
-    tipo: 'jefe', nombre: extra.nombre, banda: extra.banda, jefe: '"El Relevo"',
-    titulo: `Barrio ${n} · ${extra.nombre}`,
-    brief: 'La ciudad es grande y siempre aparece un relevo. El método es el mismo: dron, foto, uno por uno.',
+    tipo: 'jefe', nombre: extra.nombre, banda: extra.banda, jefe: '"El Relevo"', tema: extra.tema,
+    soldados: ['soldado', 'pistolero', 'cholo', 'scooter'],
+    titulo: `Sector ${n} · ${extra.nombre}`,
+    brief: 'La comuna es grande y siempre aparece un relevo. El método es el mismo: dron, foto, uno por uno.',
   };
 }
 

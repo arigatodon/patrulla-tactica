@@ -48,111 +48,88 @@ A medida que la cruzada crece, más vecinos se unen (sistema de respeto y reclut
 
 ## ACTO I — La chispa
 
-### Capítulo 0 · Prólogo: "Una molotov cada noche"
-*Cinemática / tutorial de movimiento.*
+*Las etapas y misiones llevan el nombre de los **sectores reales** de la comuna.*
 
-Nadie recuerda quién fue el primero. En un **barrio tranquilo**, alguien lanzaba
+### Prólogo · Playa Chica: "Una molotov cada noche"
+*Tutorial de movimiento y escape.*
+
+Nadie recuerda quién fue el primero. En un **sector tranquilo**, alguien lanzaba
 **una molotov todas las noches** contra el punto de venta — siempre a la misma hora,
-nunca la misma persona. Mientras los soldados de la banda vigilaban ese barrio,
+nunca la misma persona. Mientras los soldados de la banda vigilaban ese sector,
 **en los otros la gente se organizaba**. Era una distracción coordinada por las apps:
 fuego en una esquina, reuniones en las otras.
 
 La banda respondió como sabe: infiltrando **sapos** — vecinos comprados que apuntaban
 nombres. Cualquier idea nueva se volvió más difícil: ya no se sabía en quién confiar.
 
-> **Mecánica que introduce:** movimiento por turnos, la molotov como arma de área,
-> y el concepto de sapo (unidad que no pelea pero alerta a la banda si te ve).
+> **Mecánica:** movimiento por turnos, la molotov como arma de área, quemar el punto
+> y **escapar por el oeste**, y el sapo (no pelea, pero alerta a la banda si te ve).
 
-### Capítulo 1 · La Boquilla: "El préstamo"
-*Primera misión jugable. 3 personajes + dron.*
+### Capítulo 1 · Santa Elisa: "La cancha no se toca"
+*Skatepark, cancha de fútbol, y el préstamo del dron.*
 
-La junta de vecinos de Crespo les presta **un dron de reparto**. Maicol lo bautiza
-"La Garza". El plan de Doña Ruth es simple y frío:
+Santa Elisa tiene **skatepark y cancha de fútbol** — y en la cancha se instalaron
+**los traficantes**. La junta de vecinos presta **un dron de reparto**; Maicol lo
+bautiza "La Garza". El plan de Doña Ruth es simple y frío:
 
 > "Primero **identificamos bien quiénes son los soldados**. Uno por uno.
 > Con foto, con nombre, con esquina. Y uno por uno los vamos sacando."
 
-La Garza sobrevuela los techos y **revela el barrio** cuadra por cuadra.
-Cada soldado fotografiado queda marcado. Cada sapo expuesto en la red vecinal
-pierde el poder de esconderse — y la banda pierde los ojos.
+Cada soldado fotografiado queda **rastreado para siempre en el mapa**. Cada sapo
+expuesto pierde el poder de esconderse. Y en las cajas del sector ruedan **skates**:
+quien se sube avanza más casillas.
 
-> **Mecánica que introduce:** niebla de guerra revelable con el dron, fotografiar
-> con el teléfono para marcar enemigos y exponer sapos, combate básico 3v5.
+> **Mecánica:** niebla revelable con el dron (lo explorado queda revelado),
+> fotografiar = marca permanente, skates como ítem sorpresa (+2 movimiento),
+> cancha como campo abierto con traficantes plantados.
 
-### Capítulo 2 · Olaya Herrera: "Lo que haya a mano"
-*El barrio más grande, armamento improvisado.*
+### Capítulo 2 · Barrio Estación (la caleta vieja): "La estación abandonada"
+*La antigua estación de trenes, hoy un páramo tomado.*
 
-En Olaya no hay arsenal: hay **palos, botellas, piedras, sillas y cuchillas**.
-Las patrullas aprenden a pelear con lo que el barrio da — y a romper una banca
-del parque para sacar un palo cuesta un turno, pero salva la noche.
-Empiezan a aparecer **cajas** que las patrullas de otros barrios dejan escondidas:
-adentro puede haber cualquier cosa, de una manopla a una pistola.
+La vieja estación es un lugar abandonado donde la **familia de Los Cholas** montó
+**varios puntos de venta** entre los rieles. Van armados hasta con **ametralleta**.
+La misión no es un duelo: es **quemar todos los puntos** para cortar el negocio,
+con la vía férrea como columna del mapa.
 
-> **Mecánica que introduce:** armas con durabilidad (se rompen con el uso),
-> objetos rompibles del escenario, cajas de suministro con rareza
-> (aura **celeste** → **morada** → **dorada** según lo raro).
+> **Mecánica:** misión de objetivos múltiples (3 puntos de venta), enemigos con
+> ametralleta, armas con durabilidad, cajas con rareza (celeste → morada → dorada).
 
 ---
 
 ## ACTO II — La cruzada crece
 
-### Capítulo 3 · Mercado de Bazurto: "Respeto"
-*El corazón social del juego.*
+### Capítulo 3 · El Arellano: "Dunas y scooters"
+*Las dunas, la playa grande, y soldados motorizados.*
 
-Todo lo que las patrullas hacen, el barrio lo ve — porque ellas mismas lo publican.
-Una foto de un punto de venta desmantelado vale más que cien discursos: **suma respeto**,
-y con respeto **más vecinos se unen a la cruzada**. Pero la red social es un arma de
-doble filo: una mala acción publicada (pegarle a quien no era, quemar lo que no tocaba)
-enfurece al público, y hay gente que se baja de la patrulla.
+Entre la costanera y las dunas, la banda del Arellano patrulla en **scooters
+eléctricos**: se mueven el doble que cualquiera. Pero la arena cansa — cuesta el
+doble avanzar por las dunas — y una emboscada bien puesta vale más que un motor.
 
-> **Mecánica que introduce:** el teléfono en pleno (publicar hazañas, reacción del
-> público, riesgo de backlash), reclutamiento de vecinos con respeto acumulado,
-> puntos de estadística estilo RPG al subir de nivel (FUE·AGI·VIT·DES·SUE).
+> **Mecánica:** enemigos veloces en vehículo, terreno de arena con coste doble,
+> el teléfono en pleno: respeto, reclutas, **llamada a la policía** (30% de que
+> vengan, tardan hasta 5 rondas, y pueden llegar **vendidos** o pedir su "colaboración").
 
-### Capítulo 4 · El Pozón: "Papeles de la Alcaldía"
-*La corrupción también se recicla.*
+### Capítulo 4 · Las Tomas de La Punta: "La Punta" (final)
+*Las tomas de terreno, refugio de todas las banderas.*
 
-Un funcionario arrepentido filtra **cartas con información de la municipalidad**:
-turnos de las patrullas municipales, rutas, números directos, favores debidos.
-Quien junte suficientes cartas puede jugar sucio una vez: **llamar a las patrullas
-municipales** para que "casualmente" pasen por la zona caliente y los soldados
-tengan que abrirse. Es corrupto. Funciona. La discusión de si está bien usarla
-divide a la patrulla — y al jugador.
+Las tomas de La Punta han sido **refugio de diversas bandas criminales que fueron
+llegando a la comuna**. Ahí se atrincheró lo que queda de todas: cholos con
+ametralleta, motorizados, pistoleros, y **"El Patrón de La Punta"**. La misión
+final junta todo: niebla, sapos desesperados, y todas las habilidades de crew.
 
-> **Mecánica que introduce:** habilidades **globales de crew** desbloqueables por
-> colección de objetos (3 cartas municipales = "Operativo municipal", 1 uso por
-> misión: los soldados se dispersan unas rondas). Las habilidades globales también
-> tienen rareza, y se ganan además como recompensa de escenario.
-
-### Capítulo 5 · Nelson Mandela: "Uno por uno"
-*Misiones procedurales: cada barrio es distinto.*
-
-La cruzada ya no es un barrio: es un método. Cada noche toca un sector nuevo,
-con calles distintas, bandas distintas, cajas escondidas en otra parte.
-El método es siempre el de Doña Ruth: dron arriba, identificar, aislar, sacar.
-
-> **Mecánica que introduce:** generación procedural de barrios (mapa aleatorio con
-> semilla), dificultad creciente, drops de los enemigos al caer (con su aura de rareza).
-
----
-
-## ACTO III — El puerto (final)
-
-### Capítulo 6 · Getsemaní y el muelle: "El que manda"
-Las bandas de barrio eran franquicias. El proveedor — **"El Almirante"** — mueve todo
-desde el puerto. Sin sus barrios, está ciego; las patrullas conocen sus rutas mejor
-que él. La misión final junta todo: niebla, sapos desesperados, soldados de élite,
-y todas las habilidades de crew que el jugador haya coleccionado.
-
-**Cierre:** las patrullas no se disuelven. Se vuelven lo que la ciudad nunca tuvo:
+**Cierre:** las patrullas no se disuelven. Se vuelven lo que la comuna nunca tuvo:
 una red de vecinos que se cuida sola. La última imagen es la app llena de puntos
 verdes — un mapa de Cartagena sin esquinas rojas.
+
+### Después del final: sectores procedurales
+Playa Grande, San Sebastián, Las Terrazas, El Estadio… la comuna es grande y
+siempre aparece un relevo. Mapas generados al azar, dificultad creciente.
 
 ---
 
 ## Reglas del mundo (biblia rápida)
 
-- **La policía no es aliada.** Aparece solo como recurso corrupto (cartas municipales) o estorbo.
+- **La policía no es aliada.** Se le puede llamar (30% de que aparezca, tarda hasta 5 rondas), pero nadie sabe si llega **vendida a la banda del sector** o pidiendo una "colaboración" para ayudar. También existe como recurso corrupto (cartas municipales).
 - **Los sapos son vecinos.** No se les mata: se les **expone** (foto) y abandonan la banda. Herirlos resta respeto.
 - **Nada de armamento militar.** El arsenal es de barrio: lo mejor que puede caer es una pistola vieja o una katana de colección.
 - **El dron es prestado.** Si lo derriban, la junta de Crespo no presta otro hasta la siguiente misión.

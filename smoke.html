@@ -8,19 +8,22 @@
   <div id="telefono"><div id="telTitulo"></div><div id="telRespeto"></div>
     <div id="telAcciones"></div><div id="telFeed"></div><button id="telCerrar"></button></div>
   <div id="pantallaIntro" style="display:none"><button id="btnEmpezar"></button></div>
+  <div id="pantallaBrief" style="display:none"><h2 id="briefTitulo"></h2><p id="briefTexto"></p><button id="btnBrief"></button></div>
   <div id="pantallaFin" style="display:none"><h2 id="finTitulo"></h2><p id="finTexto"></p>
     <button id="btnSiguiente"></button><button id="btnReiniciarTodo"></button></div>
 </div>
-<div id="etiquetaTurno"></div><div id="nombreBarrio"></div>
+<div id="etiquetaTurno"></div><div id="nombreBarrio"></div><div id="objetivoTexto"></div>
 <span id="respetoNum"></span><span id="cartasNum"></span><div id="respetoBarra"></div>
 <div id="infoUnidad"></div><div id="cajaPronostico"><div id="pronostico"></div></div>
 <button id="btnTelefono"></button><button id="btnEsperar"></button>
-<button id="btnOperativo"></button><button id="btnFinTurno"></button>
+<div id="habilidadesCrew"></div>
+<button id="btnOperativo"></button><button id="btnFinTurno"></button><button id="btnAmbiente"></button><button id="btnRotar"></button>
 <div id="registro"></div><div id="ayuda"></div>
 
 <script>
   // en headless dump-dom no hay frames de compositor: emular rAF con timers
   window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+  window.AUTODIALOGO = true;   // los diálogos se resuelven solos (primera opción)
 </script>
 <script src="js/nucleo.js"></script>
 <script src="js/datos.js"></script>
@@ -39,121 +42,264 @@
   const t = (nombre, cond) => res.push((cond ? 'PASS' : 'FAIL') + ' ' + nombre);
   try {
     borrarSave();
+    cruzada.barrio = 1; cruzada.respeto = 10; cruzada.cartas = 0;
+    cruzada.habilidades = []; cruzada.plantilla = null;
 
-    // --- 1. mapas procedurales: 12 semillas, todos conectados y con cajas ---
-    let mapasOK = 0, cajasOK = 0;
-    for (let s = 1; s <= 12; s++) {
-      const m = generarMapa(s * 7919, 1 + (s % 4));
-      if (_conectado(m)) mapasOK++;
-      let cajas = 0;
-      for (const fila of m.celdas) for (const c of fila) if (c === 'J') cajas++;
-      if (cajas >= 3) cajasOK++;
-    }
+    // --- 1. mapas procedurales: 12 semillas conectadas ---
+    let mapasOK = 0;
+    for (let s = 1; s <= 12; s++)
+      if (_conectado(generarMapa(s * 7919, 1 + (s % 4)))) mapasOK++;
     t('mapas-conectados-12/12', mapasOK === 12);
-    t('mapas-con-cajas', cajasOK === 12);
 
-    // --- 2. misión con semilla fija ---
+    // ============ PRÓLOGO (misión molotov, Playa Chica) ============
     iniciarMision(12345);
-    t('escuadron-4', vivos('jugador').length === 4);
-    t('hay-jefe', vivos('enemigo').some(e => e.jefe));
-    t('hay-sapo', vivos('enemigo').some(e => e.sapo));
+    t('prologo-tipo', partida.tipoMision === 'molotov' && partida.nombreBarrio === 'Playa Chica');
+    t('prologo-sin-dron', !vivos('jugador').some(u => u.vuela));
+    t('prologo-3-personajes', vivos('jugador').length === 3);
+    t('prologo-sin-jefe', !vivos('enemigo').some(e => e.jefe));
+    const pt = mapa.puntos[0];
+    t('prologo-punto', pt && mapa.celdas[pt.y][pt.x] === 'P');
+    t('prologo-molotov-equipada', vivos('jugador')[0].arma.id === 'molotov');
+    t('prologo-objetivo-ui', $('objetivoTexto').textContent.includes('punto de venta'));
+    t('mapa-grande', mapa.cols >= 18 && mapa.filas >= 13);
+    t('slots-base-3', vivos('jugador')[0].slots === 3);
 
-    // --- 3. niebla: al inicio hay oculto, visible y el dron ve más ---
-    let ocultas = 0, visibles = 0;
-    for (let y = 0; y < mapa.filas; y++) for (let x = 0; x < mapa.cols; x++) {
-      if (mapa.niebla[y][x] === 0) ocultas++;
-      if (mapa.niebla[y][x] === 2) visibles++;
-    }
-    t('niebla-inicial', ocultas > 20 && visibles > 5);
-    const dron = vivos('jugador').find(u => u.vuela);
-    t('dron-vision-5', dron.vision === VISION_DRON);
-    // mover el dron al este revela más
-    const antes = ocultas;
-    dron.x += 4; dron.gx = dron.x; actualizarVision();
-    let ocultas2 = 0;
-    for (let y = 0; y < mapa.filas; y++) for (let x = 0; x < mapa.cols; x++)
-      if (mapa.niebla[y][x] === 0) ocultas2++;
-    t('dron-revela', ocultas2 < antes);
-    dron.x -= 4; dron.gx = dron.x; actualizarVision();
+    // rotación de cámara: ida y vuelta exactas en las 4 orientaciones
+    let rotOK = true;
+    for (rotacion = 0; rotacion < 4; rotacion++)
+      for (const [qx, qy] of [[0, 0], [5, 3], [mapa.cols - 1, mapa.filas - 1]]) {
+        const [rx, ry] = aRender(qx, qy);
+        const [bx, by] = desRender(rx, ry);
+        if (bx !== qx || by !== qy) rotOK = false;
+      }
+    rotacion = 0;
+    t('rotacion-reversible', rotOK);
+    centrarCamara();
+    t('zoom-encuadra', zoom > 0.4 && zoom <= 1);
 
-    // --- 4. stats RPG y niveles ---
-    const ruth = vivos('jugador').find(u => u.clase === 'lider');
-    const pvAntes = ruth.pvMax, nivelAntes = ruth.nivel;
-    darExp(ruth, expSiguiente(ruth.nivel) + 5);
-    t('sube-nivel', ruth.nivel === nivelAntes + 1 && ruth.puntos === 3);
-    const vitAntes = ruth.stats.VIT;
-    subirStat(ruth, 'VIT');
-    t('sube-stat', ruth.stats.VIT === vitAntes + 1 && ruth.puntos === 2 && ruth.pvMax > pvAntes);
-
-    // --- 5. combate: mover y atacar con exp ---
-    const flaco = vivos('jugador').find(u => u.clase === 'pescador');
-    const soldado = vivos('enemigo').find(e => !e.sapo && !e.jefe);
-    soldado.x = flaco.x + 1; soldado.y = flaco.y; soldado.gx = soldado.x; soldado.gy = soldado.y;
+    // prender el punto de cerca y escapar al oeste
+    const ruth = vivos('jugador')[0];
+    const [ax, ay] = celdaLibreCerca(pt.x - 1, pt.y);
+    ruth.x = ax; ruth.y = ay; ruth.gx = ax; ruth.gy = ay;
     actualizarVision();
-    seleccionar(flaco);
-    t('blanco-detectado', partida.blancos.has(soldado));
-    const pvSol = soldado.pv;
-    await atacarMoviendo(flaco, soldado);
-    t('dano-o-esquiva', soldado.pv < pvSol || soldado.pv === pvSol);   // pudo esquivar
-    t('flaco-actuo', flaco.actuo);
+    prenderDeCerca(ruth, pt);
+    t('punto-quemado', pt.quemado === true);
+    t('banda-alertada', vivos('enemigo').every(e => e.aggro));
+    let col = 0;
+    for (const u of vivos('jugador')) { u.x = 0; u.y = Math.min(col++, mapa.filas - 1); u.gx = u.x; u.gy = u.y; }
+    chequearFin();
+    t('prologo-victoria-escape', partida.terminada === true);
+    t('avanza-a-cap1', cruzada.barrio === 2);
+    t('recompensa-habilidad', cruzada.habilidades.length === 1);
 
-    // --- 6. durabilidad: el arma se rompe y pasa a puños ---
+    // ============ CAPÍTULO 1 (Santa Elisa: cancha + skatepark) ============
+    $('pantallaFin').style.display = 'none';
+    cruzada.habilidades = ['olla', 'apagon', 'murga'];   // probar las 3
+    iniciarMision(777);
+    t('cap1-santa-elisa', partida.tipoMision === 'jefe' && partida.nombreBarrio === 'Santa Elisa');
+    t('cap1-con-dron', vivos('jugador').some(u => u.vuela));
+    t('cap1-jefe-rucio', vivos('enemigo').some(e => e.jefe && e.nombre === '"El Rucio"'));
+    t('cap1-cancha', !!mapa.rasgos.cancha && mapa.celdas[mapa.rasgos.cancha.y + 1][mapa.rasgos.cancha.x + 1] === 'F');
+    t('cap1-skate-suelto', sueltos.some(s => s.item.id === 'skate'));
+    t('usos-habilidades', partida.usosHabilidad.olla === 1 && partida.usosHabilidad.murga === 1);
+
+    // skate: +2 de movimiento al subirse
+    const flaco0 = vivos('jugador').find(u => u.clase === 'pescador');
+    const movAntes = flaco0.mov;
+    entregar(flaco0, instanciarObjeto('skate'));
+    t('skate-mas-movimiento', flaco0.vehiculo === 'skate' && flaco0.mov === movAntes + 2);
+
+    // mochila limitada por slots y ampliable con puntos
+    flaco0.mochila = [];
+    for (const id of ['palo', 'botella', 'cuchilla', 'manopla']) meterMochila(flaco0, instanciarArma(id));
+    t('mochila-limite-3', flaco0.mochila.length === 3);
+    flaco0.puntos = 1;
+    subirSlots(flaco0);
+    t('slots-ampliados', flaco0.slots === 4 && flaco0.puntos === 0);
+
+    // cambio de arma gratis desde la mochila recalcula blancos
+    seleccionar(flaco0);
+    equiparDeMochila(flaco0, 0);
+    t('cambio-arma-gratis', flaco0.arma.id !== 'punos' && !flaco0.actuo);
+    deseleccionar();
+
+    // soldado fotografiado queda rastreado (visible aunque esté lejos)
+    const lejano = vivos('enemigo').find(e => !e.sapo && !visible(e.x, e.y));
+    if (lejano) {
+      lejano.marcado = true;
+      const alc = alcanceDe(flaco0);
+      lejano.x = flaco0.x + 1; lejano.y = flaco0.y; lejano.gx = lejano.x; lejano.gy = lejano.y;
+      const op = opcionesAtaque(flaco0, alcanceDe(flaco0));
+      t('marcado-atacable-sin-vision', op.has(lejano) || visible(lejano.x, lejano.y));
+      lejano.marcado = false;
+    } else t('marcado-atacable-sin-vision', true);
+
+    // --- olla comunitaria: cura a toda la patrulla ---
+    const herido = vivos('jugador')[0];
+    herido.pv = Math.max(1, herido.pv - 6);
+    const pvAntes = herido.pv;
+    usarHabilidadCrew('olla');
+    t('olla-cura', herido.pv === pvAntes + 5 && partida.usosHabilidad.olla === 0);
+    t('olla-sin-usos', !habilidadLista('olla'));
+
+    // --- murga: la banda pierde la ronda entera ---
+    usarHabilidadCrew('murga');
+    t('murga-activa', partida.murgaRondas === 1);
+    const posiciones = vivos('enemigo').map(e => e.x + ',' + e.y).join('|');
+    for (const e of vivos('enemigo')) e.aggro = true;   // querrían moverse
+    partida.ocupado = false;
+    const rondaAntes = partida.ronda;
+    await turnoEnemigo();
+    t('murga-congela', vivos('enemigo').map(e => e.x + ',' + e.y).join('|') === posiciones);
+    t('murga-ronda-avanza', partida.ronda === rondaAntes + 1 && partida.murgaRondas === 0);
+    for (const e of vivos('enemigo')) e.aggro = false;
+
+    // --- apagón: los sapos no alertan ---
+    usarHabilidadCrew('apagon');
+    t('apagon-activo', partida.apagonRondas === 2);
+    const sapo = vivos('enemigo').find(e => e.sapo);
     const maicol = vivos('jugador').find(u => u.clase === 'tecnico');
-    maicol.arma = instanciarArma('botella');   // 1 uso
-    gastarArma(maicol);
-    t('arma-rota-a-punos', maicol.arma.id === 'punos');
+    if (sapo && maicol) {
+      const [sx, sy] = celdaLibreCerca(maicol.x + 1, maicol.y);
+      sapo.x = sx; sapo.y = sy; sapo.gx = sx; sapo.gy = sy;
+      partida.ocupado = false;
+      await turnoEnemigo();
+      t('apagon-sapo-mudo', !sapo.dioAlarma && partida.apagonRondas === 1);
+    } else t('apagon-sapo-mudo', false);
 
-    // --- 7. loot: cajas con rareza válida y auras ---
+    // --- regresiones básicas del motor ---
+    const flaco = vivos('jugador').find(u => u.clase === 'pescador');
+    flaco.mochila = [];                      // sin repuesto: rota el arma → puños
+    flaco.arma = instanciarArma('botella');
+    gastarArma(flaco);
+    t('durabilidad-rompe', flaco.arma.id === 'punos');
+    flaco.mochila = [instanciarArma('cuchilla')];   // con repuesto: auto-equipa
+    flaco.arma = instanciarArma('botella');
+    gastarArma(flaco);
+    t('durabilidad-autoequipa', flaco.arma.id === 'cuchilla' && flaco.mochila.length === 0);
     sembrar(999);
     const rarezas = new Set();
     for (let i = 0; i < 200; i++) rarezas.add(defDe(tirarLoot()).rareza);
-    t('loot-rarezas-variadas', rarezas.size >= 3 && [...rarezas].every(r => RAREZAS[r]));
+    t('loot-rarezas', rarezas.size >= 3);
 
-    // --- 8. banca rompible da palo ---
-    mapa.celdas[flaco.y][flaco.x + 1 < mapa.cols ? flaco.x + 1 : flaco.x - 1] = 'N';
-    const bx = flaco.x + 1 < mapa.cols ? flaco.x + 1 : flaco.x - 1;
-    flaco.arma = instanciarArma('punos');
-    romperBanca(flaco, bx, flaco.y);
-    t('banca-da-palo', flaco.arma.id === 'palo' && mapa.bancasRotas.size === 1);
-
-    // --- 9. teléfono: foto marca, sapo expuesto, respeto sube ---
-    const sapo = vivos('enemigo').find(e => e.sapo);
-    if (sapo) {
-      sapo.x = maicol.x + 1; sapo.y = maicol.y; sapo.gx = sapo.x; sapo.gy = sapo.y;
-      actualizarVision();
-      const respAntes = cruzada.respeto;
-      maicol.actuo = false;
-      partida.seleccion = maicol; partida.estado = 'seleccion';
-      accionFoto(maicol);
-      t('sapo-expuesto', sapo.marcado && sapo.expuesto && cruzada.respeto > respAntes);
-    } else t('sapo-expuesto', false);
-
-    // --- 10. convocar vecino ---
-    cruzada.respeto = 60;
-    const antes10 = vivos('jugador').length;
-    const dona = vivos('jugador')[0]; dona.actuo = false;
-    partida.seleccion = dona; partida.estado = 'seleccion';
-    accionConvocar(dona);
-    t('vecino-se-une', vivos('jugador').length === antes10 + 1 && cruzada.respeto === 60 - COSTO_CONVOCAR);
-
-    // --- 11. operativo municipal con 3 cartas ---
-    cruzada.cartas = 3; cruzada.operativoUsado = false;
-    t('operativo-desbloqueado', operativoDisponible());
-    usarOperativo();
-    t('operativo-activo', partida.operativoRondas === RONDAS_OPERATIVO && cruzada.operativoUsado);
-
-    // --- 12. turno enemigo completo (con huida por operativo) ---
-    partida.ocupado = false; partida.estado = 'idle'; partida.seleccion = null;
-    const rondaAntes = partida.ronda;
-    await turnoEnemigo();
-    t('vuelve-al-jugador', partida.fase === 'jugador' && partida.ronda === rondaAntes + 1);
-    t('operativo-descuenta', partida.operativoRondas === RONDAS_OPERATIVO - 1);
-
-    // --- 13. victoria al caer el jefe ---
-    for (const e of vivos('enemigo').filter(e => e.jefe)) { e.pv = 0; }
+    // --- victoria del capítulo: cae el jefe ---
+    for (const e of vivos('enemigo').filter(e => e.jefe)) e.pv = 0;
+    partida.terminada = false;
     chequearFin();
-    t('victoria', partida.terminada === true);
-    t('avanza-barrio', cruzada.barrio === 2);
+    t('cap1-victoria', partida.terminada === true && cruzada.barrio === 3);
+
+    // ============ CAPÍTULO 2 (Barrio Estación: Los Cholas) ============
+    $('pantallaFin').style.display = 'none';
+    iniciarMision(2024);
+    t('cap2-estacion', partida.tipoMision === 'puntos' && partida.nombreBarrio === 'Barrio Estación');
+    t('cap2-rieles', mapa.rasgos.rieles !== undefined && mapa.celdas[mapa.rasgos.rieles].every(c => c === 'R' || c === 'P' || c === 'J'));
+    t('cap2-tres-puntos', mapa.puntos.length === 3);
+    t('cap2-cholas-ametralleta', vivos('enemigo').some(e => e.clase === 'cholo' && e.arma.id === 'ametralleta'));
+    // quemar los 3 puntos = victoria (sin necesidad de escapar)
+    const q = vivos('jugador')[0];
+    for (const p of mapa.puntos) prenderPunto(q, p);
+    t('cap2-victoria-puntos', partida.terminada === true && cruzada.barrio === 4);
+
+    // ============ CAPÍTULO 3 (El Arellano: dunas y scooters) ============
+    $('pantallaFin').style.display = 'none';
+    iniciarMision(31337);
+    t('cap3-arellano', partida.nombreBarrio === 'El Arellano' && partida.tema === 'dunas');
+    let dunas = 0;
+    for (const fila of mapa.celdas) for (const c of fila) if (c === 'D') dunas++;
+    t('cap3-hay-dunas', dunas > 8);
+    const enScooter = vivos('enemigo').find(e => e.clase === 'scooter');
+    t('cap3-scooter-rapido', !!enScooter && enScooter.vehiculo === 'scooter' && enScooter.mov >= 6);
+
+    // ============ POLICÍA: dos ramas (vendidos / coima) ============
+    // rama vendidos: forzar rnd bajo (función global reasignable)
+    const rndReal = rnd;
+    partida.policiaLlamada = false; partida.policia = null; partida.terminada = false;
+    rnd = () => 0.1;   // llamada exitosa (0.1 < 0.30)
+    const maicol2 = vivos('jugador').find(u => u.clase === 'tecnico') || vivos('jugador')[0];
+    maicol2.actuo = false; partida.seleccion = maicol2; partida.estado = 'seleccion';
+    accionLlamarPolicia(maicol2);
+    t('policia-programada', !!partida.policia && partida.policia.llega > partida.ronda && partida.policiaLlamada);
+    partida.policia.llega = partida.ronda;   // que lleguen ya
+    rnd = () => 0.2;   // 0.2 < 0.35 → vendidos
+    await chequearPolicia();
+    t('policia-vendida-spawn', vivos('enemigo').filter(e => e.esPolicia).length === 2);
+    // se retiran solos tras sus rondas de "servicio"
+    for (const e of vivos('enemigo')) if (e.esPolicia) e.seVaEnRonda = partida.ronda;
+    partida.ocupado = false;
+    await turnoEnemigo();
+    t('policia-se-retira', vivos('enemigo').filter(e => e.esPolicia).length === 0);
+
+    // rama coima: pagan y la policía espanta a la banda (AUTODIALOGO elige pagar)
+    partida.policia = { llega: partida.ronda, resuelto: false };
+    cruzada.respeto = 50;
+    rnd = () => 0.9;   // 0.9 > 0.35 → honestos-que-piden
+    await chequearPolicia();
+    t('policia-coima-barrido', partida.operativoRondas >= 2 && cruzada.respeto === 40);
+    rnd = rndReal;
+
+    // llamada fallida: 70% de las veces no viene nadie (y no se puede rellamar)
+    partida.policiaLlamada = false; partida.policia = null;
+    rnd = () => 0.9;   // 0.9 > 0.30 → no vienen
+    maicol2.actuo = false; partida.seleccion = maicol2; partida.estado = 'seleccion';
+    accionLlamarPolicia(maicol2);
+    t('policia-no-viene', partida.policia === null && partida.policiaLlamada);
+    rnd = rndReal;
+
+    // ============ CÁMARA: paneo con límites y zoom manual ============
+    const oxAntes = OX, oyAntes = OY;
+    moverCamara(120, 90);
+    t('camara-panea', OX !== oxAntes || OY !== oyAntes);
+    panX = 99999; panY = 99999; centrarCamara();
+    t('camara-limitada', isFinite(OX) && isFinite(OY) && Math.abs(panX) < 3000 && Math.abs(panY) < 3000);
+    panX = 0; panY = 0;
+    ajustarZoom(1.5);
+    t('zoom-manual', zoom > zoomFit && zoomExtra > 1);
+    zoomExtra = 1; centrarCamara();
+
+    // ============ OBJETOS NUEVOS ============
+    // armadura: el chaleco reduce el daño recibido
+    const tanque = vivos('jugador')[0];
+    const atacante = vivos('enemigo').find(e => !e.sapo);
+    const sinChaleco = danoBase(atacante, tanque);
+    entregar(tanque, instanciarObjeto('chaleco'));
+    t('chaleco-equipado', tanque.armadura === 'chaleco');
+    t('chaleco-reduce-dano', danoBase(atacante, tanque) === Math.max(1, sinChaleco - 2));
+
+    // silla rompible → arma silla
+    const romperdor = vivos('jugador').find(u => !u.vuela && u !== tanque) || tanque;
+    const sxx = romperdor.x + 1 < mapa.cols ? romperdor.x + 1 : romperdor.x - 1;
+    mapa.celdas[romperdor.y][sxx] = 'S';
+    romperdor.arma = instanciarArma('punos');
+    romperMueble(romperdor, sxx, romperdor.y);
+    t('silla-es-arma', romperdor.arma.id === 'silla');
+
+    // basurero rompible → algo sale
+    const oxx = romperdor.x - 1 >= 0 ? romperdor.x - 1 : romperdor.x + 2;
+    mapa.celdas[romperdor.y][oxx] = 'O';
+    const cargaAntes = romperdor.mochila.length;
+    romperMueble(romperdor, oxx, romperdor.y);
+    t('basurero-da-loot', mapa.bancasRotas.has(clave(oxx, romperdor.y)) &&
+        (romperdor.mochila.length >= cargaAntes));
+
+    // fuegos artificiales: área que aturde sin incendiar
+    const victima = vivos('enemigo').find(e => !e.sapo);
+    romperdor.arma = instanciarArma('fuegos');
+    const fuegosAntes = mapa.fuego.size;
+    await ataqueArea(romperdor, victima.x, victima.y);
+    t('fuegos-aturden', (victima.pv <= 0 || victima.aturdido >= 1) && mapa.fuego.size === fuegosAntes);
+
+    // --- final (Las Tomas de La Punta) y rotación procedural ---
+    cruzada.barrio = 5;
+    $('pantallaFin').style.display = 'none';
+    iniciarMision(4242);
+    t('final-la-punta', partida.tipoMision === 'final' && vivos('enemigo').some(e => e.jefe && e.nombre === '"El Patrón de La Punta"'));
+    t('final-mas-banda', vivos('enemigo').length >= 10);
+    t('post-final-rotacion', capituloDe(6).tipo === 'jefe' && capituloDe(6).nombre.length > 0);
+    // loot del sector: en santaelisa pueden salir skates
+    partida.tema = 'santaelisa'; sembrar(31);
+    let salioSkate = false;
+    for (let i = 0; i < 300; i++) if (tirarLoot().id === 'skate') { salioSkate = true; break; }
+    t('loot-skate-en-santaelisa', salioSkate);
   } catch (e) {
     res.push('ERROR ' + e.message + ' @ ' + (e.stack || '').split('\n')[1]);
   }

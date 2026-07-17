@@ -10,6 +10,32 @@
 const TW = 72, TH = 36;              // losa isométrica
 const W = 960, H = 600;
 let OX = 480, OY = 90;               // origen (se recalcula por mapa)
+let zoom = 1;                        // zoom efectivo = zoomFit * zoomExtra
+let zoomFit = 1;                     // encuadre automático para mapas grandes
+let zoomExtra = 1;                   // zoom manual del jugador (rueda / pellizco)
+let panX = 0, panY = 0;              // paneo de cámara en coordenadas de mundo
+let rotacion = 0;                    // vista girada en pasos de 90° (0..3)
+
+// Rotación de cámara: convierte coordenadas de rejilla a coordenadas de
+// dibujo según la orientación actual. Sirve para ver bloques tapados.
+function aRender(x, y) {
+  if (!mapa || rotacion === 0) return [x, y];
+  const mc = mapa.cols - 1, mf = mapa.filas - 1;
+  if (rotacion === 1) return [mf - y, x];
+  if (rotacion === 2) return [mc - x, mf - y];
+  return [y, mc - x];                // rotacion 3
+}
+function desRender(rx, ry) {
+  if (!mapa || rotacion === 0) return [rx, ry];
+  const mc = mapa.cols - 1, mf = mapa.filas - 1;
+  if (rotacion === 1) return [ry, mf - rx];
+  if (rotacion === 2) return [mc - rx, mf - ry];
+  return [mc - ry, rx];              // rotacion 3
+}
+// dimensiones del mapa tal como se dibuja (giradas en 90°/270°)
+const colsRender = () => !mapa ? 1 : (rotacion % 2 ? mapa.filas : mapa.cols);
+const filasRender = () => !mapa ? 1 : (rotacion % 2 ? mapa.cols : mapa.filas);
+const profundidad = (x, y) => { const [rx, ry] = aRender(x, y); return rx + ry; };
 
 // ---------- Constantes de juego ----------
 const VISION_HUMANO = 3;
@@ -83,7 +109,7 @@ function guardar() {
       .filter(u => u.equipo === 'jugador' && u.pv > 0)
       .map(u => ({
         clase: u.clase, nombre: u.nombre, nivel: u.nivel, exp: u.exp,
-        stats: { ...u.stats }, puntos: u.puntos,
+        stats: { ...u.stats }, puntos: u.puntos, slots: u.slots, armadura: u.armadura || null,
         arma: u.arma ? { id: u.arma.id, usos: u.arma.usos } : null,
       }));
     localStorage.setItem(CLAVE_SAVE, JSON.stringify(cruzada));
@@ -104,8 +130,8 @@ const desClave = s => s.split(',').map(Number);
 const lerp = (a, b, t) => a + (b - a) * t;
 const mdist = (ax, ay, bx, by) => Math.abs(ax - bx) + Math.abs(ay - by);
 const enMapa = (x, y) => mapa && x >= 0 && y >= 0 && x < mapa.cols && y < mapa.filas;
-const isoX = (x, y) => (x - y) * TW / 2 + OX;
-const isoY = (x, y) => (x + y) * TH / 2 + OY;
+const isoX = (x, y) => { const [rx, ry] = aRender(x, y); return (rx - ry) * TW / 2 + OX; };
+const isoY = (x, y) => { const [rx, ry] = aRender(x, y); return (rx + ry) * TH / 2 + OY; };
 const dormir = ms => new Promise(r => setTimeout(r, ms));
 function interpolar(ms, fn) { return new Promise(res => tweens.push({ e: 0, ms, fn, res })); }
 
@@ -114,7 +140,7 @@ const vivos = equipo => unidades.filter(u => u.pv > 0 && u.equipo === equipo);
 
 // ---------- Canvas ----------
 const canvas = document.getElementById('juego');
-const ctx = canvas ? canvas.getContext('2d') : null;
+let ctx = canvas ? canvas.getContext('2d') : null;   // intercambiable: los retratos de diálogo lo apuntan a su propio canvas
 const $ = id => document.getElementById(id);
 const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
 if (canvas) {
